@@ -1,0 +1,61 @@
+{
+  "name": "ledgehq/ledge-laravel",
+  "description": "Health, uptime, and compliance monitoring for your Laravel applications.",
+  "type": "library",
+  "license": "proprietary",
+  "homepage": "https://ledgehq.app",
+  "support": {
+    "email": "hello@ledgehq.app",
+    "issues": "https://github.com/ledgehq/ledge-laravel/issues",
+    "source": "https://github.com/ledgehq/ledge-laravel"
+  },
+  "require": {
+    "php": "^8.2",
+    "illuminate/console": "^11.0 || ^12.0 || ^13.0",
+    "illuminate/contracts": "^11.0 || ^12.0 || ^13.0",
+    "illuminate/database": "^11.0 || ^12.0 || ^13.0",
+    "illuminate/http": "^11.0 || ^12.0 || ^13.0",
+    "illuminate/support": "^11.0 || ^12.0 || ^13.0",
+    "vlucas/phpdotenv": "^5.6"
+  },
+  "require-dev": {
+    "larastan/larastan": "^3.0",
+    "laravel/pint": "^1.18",
+    "orchestra/testbench": "^9.0 || ^10.0 || ^11.0",
+    "phpunit/phpunit": "^11.0 || ^12.0"
+  },
+  "autoload": {
+    "psr-4": {
+      "LedgeHQ\\Ledge\\": "src/"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "LedgeHQ\\Ledge\\Tests\\": "tests/"
+    }
+  },
+  "extra": {
+    "laravel": {
+      "providers": [
+        "LedgeHQ\\Ledge\\LedgeServiceProvider"
+      ],
+      "aliases": {
+        "Ledge": "LedgeHQ\\Ledge\\Facades\\Ledge"
+      }
+    }
+  },
+  "scripts": {
+    "test": "phpunit",
+    "check-cs": "pint --test",
+    "fix-cs": "pint",
+    "phpstan": "phpstan analyse --memory-limit=1G"
+  },
+  "config": {
+    "sort-packages": true,
+    "allow-plugins": {
+      "php-http/discovery": false
+    }
+  },
+  "minimum-stability": "stable",
+  "prefer-stable": true
+}
