@@ -12,6 +12,7 @@ Working notes. Review and prune.
 - Ledge-side update testing for Laravel apps = clone the repo, `composer update`, run the project's own test suite, report. Craft keeps the crawl strategy.
 - Config keys are snake_case (Laravel idiom); `LEDGE_*` env names and the JSON payload stay identical to the Craft plugin.
 - `dependenciesHash` normalization must stay byte-identical to Craft (test pins `c78b87ee…`).
+- Decided 2026-10-22: the `packages` snapshot stays cache-only (a `cache:clear` just means "not refreshed yet" until the next daily run); a failed `BackupJob` does not retry (`tries = 1`, Ledge issues a fresh `run_id`); no `cpUrl` equivalent on Laravel.
 - Breaking payload changes are fine right now (no installs yet). The health payload carries `capabilities` and `updateTest` alongside the older `acquireEnabled` / `backupProfileSupported` booleans until the Ledge service reads the new fields.
 
 ## Package
@@ -26,9 +27,9 @@ Working notes. Review and prune.
 - [x] Real `acquireEnabled` / `backupProfileSupported` values plus `capabilities` and `updateTest` in the health payload.
 - [x] `docs/acquire-protocol.md` copied from the Craft repo and trimmed to the backup profile.
 - [ ] Exercise against a real MySQL and Postgres app (the test suite covers SQLite end to end; MySQL/Postgres only through the db-dumper configuration).
-- [ ] Decide whether a failed job should retry. Today `tries = 1`: a replayed command is rejected, so Ledge re-issues a fresh `run_id` instead.
 
 ### Shared protocol fixtures (replaces what ledge-core would have given us)
+Deferred 2026-10-22 until the Ledge service reads the Laravel payload; do this before the second implementation (Craft 6) touches the protocol.
 - [ ] Create a fixtures set both repos vendor: signed command envelopes with expected verdicts, canonical-JSON input/output pairs, a keyset document, a known bundle + secret key that must decrypt. Same files, run through each repo's own implementation.
 - [ ] Add the fixtures to `ledge-craft` too, and a note in both READMEs that protocol changes update the fixtures first.
 
@@ -36,27 +37,24 @@ Working notes. Review and prune.
 - [x] Extension seams: `checks` list in `config/ledge.php`, `Ledge::check()` closures, and `SpatieHealthCheck::wrap()` for spatie/laravel-health checks (dev dependency only; listed under `suggest`).
 - [x] New checks: `cache`, `redis`, `horizon`, `optimized`, `phpVersion`, `packages`.
 - [x] `packages` check via `ledge:packages:refresh` (Packagist p2, Guzzle pool, snapshot in the cache, scheduled daily). No `criticalUpdateStatus`: Ledge already matches advisories through `/dependencies`, so a second signal here would duplicate it.
-- [ ] `packages`: the snapshot lives in the cache and is lost on `cache:clear` until the next refresh. Consider also writing it to `storage/framework/ledge/packages.json`.
 - [ ] `phpVersion`: the support table is a constant in `PhpVersionCheck`; it needs a line added when PHP 8.6 ships (expected late 2026).
-- [ ] `horizon` reports master supervisor state only. Horizon-aware queue stats (pending/stale per supervisor, wait times) are still open; Redis pending count is best-effort today and `stale` is null off the database driver. Decide whether that should be surfaced as a note in the payload.
+- [x] `horizon` reports supervisors, processes, per-queue wait times, and recently failed jobs alongside master state; the `queue` check carries a `note` when `stale` is null for the driver. Verify the figures against a real Horizon install (tests use fakes for the Horizon contracts).
 - [ ] Queue: `queue_failed_window` is a deliberate divergence from Craft (which counts all failed jobs). Confirm the Ledge dashboard copy makes sense for both.
 - [ ] Failed logins: cache buckets are lost on `cache:clear`. Consider an optional table-backed store, off by default.
 - [ ] Environment: validate against a few real apps for false positives (optional keys listed in `.env.example` with blank values will be reported as *defined* if they exist in `.env`, but *missing* if the line is absent). Document `LEDGE_IGNORED_ENV_VARS`.
 - [ ] Scheduler: confirm `schedule:work` and `schedule:run` under Forge/Vapor both fire `CommandFinished` with `command === 'schedule:run'`. Consider also listening to `ScheduledTaskFinished` as a fallback signal.
 - [ ] Storage: probe write on the default filesystem disk? Skipped for now because a remote disk would cost a request per poll.
-- [ ] `cpUrl` equivalent: Nova / Filament admin URL if detectable, else leave absent.
 
 ### Payload / contract (coordinate with the Ledge service)
 - [ ] Ledge service reads `capabilities` (`["backup"]` here, `["backup","full"]` on Craft once ported) and `updateTest.strategy` (`testsuite` | `crawl`); then drop `backupProfileSupported` here and port `capabilities` to Craft 5.x.
 - [ ] `platform.environment` is new (additive); make sure the service tolerates it.
 
 ### Tooling & release
-- [ ] GitHub Actions: PHP 8.3 / 8.4 × Laravel 13 running `composer test`, `check-cs`, `phpstan`.
-- [ ] Composer is not on the host PATH; sessions so far used a downloaded `composer.phar`. Add a DDEV config or a README note so `composer install` works the same way as `ledge-craft`.
+- [x] GitHub Actions: PHP 8.3 / 8.4 × Laravel 13 running `composer test`, `check-cs`, `phpstan` (`.github/workflows/ci.yml`).
+- [x] Composer is not on the host PATH; documented in `CLAUDE.md`.
 - [ ] Decide how the package is distributed: public Packagist with `proprietary` license (as `ledge-craft` does) vs. a private Composer repo. Affects the Craft 6 plugin later (Plugin Store plugins can require any Packagist package).
 - [ ] Tag `1.0.0`; date the CHANGELOG.
 - [ ] Create a `ledgehq/test-laravel` app (like `test-craft-5`) to exercise the endpoints for real, including `config:cache`, `route:cache`, and a queued backup against MySQL.
-- [ ] Add a `CLAUDE.md` for this repo (conventions differ from the Craft plugin: Pint, snake_case config, Testbench).
 
 ## Ledge service
 

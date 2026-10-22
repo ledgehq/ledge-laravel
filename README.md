@@ -51,7 +51,7 @@ Every check echoes the values it used under a `thresholds` key so the Ledge dash
 | `failedLogins` | Auth `Failed` events within `LEDGE_FAILED_LOGINS_WINDOW`, counted in the cache |
 | `cache` | Write/read/delete roundtrip on the default cache store |
 | `redis` | `PING` on the default Redis connection; only reported when cache, queue, session, or broadcasting use Redis |
-| `horizon` | Horizon master supervisors running / paused; only reported when `laravel/horizon` is installed |
+| `horizon` | Horizon master supervisors running / paused, plus supervisors, processes, per-queue wait times, and recently failed jobs; only reported when `laravel/horizon` is installed |
 | `optimized` | Config, route, and event caches; trips only when `APP_ENV=production` |
 | `phpVersion` | Support phase of the running PHP branch (`active`, `security`, `eol`) |
 | `packages` | Installed Composer packages with a newer stable release on Packagist, plus `frameworkVersion` for `laravel/framework` |

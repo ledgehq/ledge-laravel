@@ -66,7 +66,49 @@ final class PlatformChecksTest extends TestCase
         $this->health()->assertJsonPath('checks.horizon.status', 'degraded')->assertJsonPath('checks.horizon.paused', 1);
 
         $this->bindHorizon([(object) ['status' => 'running']]);
-        $this->health()->assertJsonPath('checks.horizon.status', 'healthy')->assertJsonPath('checks.horizon.masters', 1);
+        $this->health()->assertJsonPath('checks.horizon.status', 'healthy')
+            ->assertJsonPath('checks.horizon.masters', 1)
+            ->assertJsonPath('checks.horizon.supervisors', null)
+            ->assertJsonPath('checks.horizon.recentlyFailed', null);
+    }
+
+    public function test_horizon_reports_queue_stats_when_available(): void
+    {
+        $this->bindHorizon([(object) ['status' => 'running']]);
+        $this->app->instance(HorizonCheck::SUPERVISOR_REPOSITORY, $this->repository([
+            (object) ['processes' => ['default' => 3, 'mail' => 1]],
+            (object) ['processes' => ['reports' => 2]],
+        ]));
+        $this->app->instance(HorizonCheck::WAIT_TIME_CALCULATOR, new class
+        {
+            /** @return array<string, float> */
+            public function calculate(): array
+            {
+                return ['redis:default' => 4.2, 'redis:mail' => 0.0, 'redis:reports' => 95.0];
+            }
+        });
+        $this->app->instance(HorizonCheck::JOB_REPOSITORY, new class
+        {
+            public function countRecentlyFailed(): int
+            {
+                return 7;
+            }
+        });
+
+        $this->health()
+            ->assertJsonPath('checks.horizon.status', 'healthy')
+            ->assertJsonPath('checks.horizon.supervisors', 2)
+            ->assertJsonPath('checks.horizon.processes', 6)
+            ->assertJsonPath('checks.horizon.waitTimes', ['redis:default' => 4, 'redis:mail' => 0, 'redis:reports' => 95])
+            ->assertJsonPath('checks.horizon.longestWaitSeconds', 95)
+            ->assertJsonPath('checks.horizon.recentlyFailed', 7);
+    }
+
+    public function test_queue_notes_when_staleness_is_not_observable(): void
+    {
+        $this->health()
+            ->assertJsonPath('checks.queue.stale', null)
+            ->assertJsonPath('checks.queue.note', 'Stale jobs are not observable on the sync driver; see the horizon check when Horizon is installed');
     }
 
     public function test_optimized_only_trips_in_production(): void
@@ -95,16 +137,24 @@ final class PlatformChecksTest extends TestCase
      */
     private function bindHorizon(array $masters): void
     {
-        $this->app->instance(HorizonCheck::MASTER_REPOSITORY, new class($masters)
+        $this->app->instance(HorizonCheck::MASTER_REPOSITORY, $this->repository($masters));
+    }
+
+    /**
+     * @param  list<object>  $items
+     */
+    private function repository(array $items): object
+    {
+        return new class($items)
         {
-            /** @param list<object> $masters */
-            public function __construct(private readonly array $masters) {}
+            /** @param list<object> $items */
+            public function __construct(private readonly array $items) {}
 
             /** @return list<object> */
             public function all(): array
             {
-                return $this->masters;
+                return $this->items;
             }
-        });
+        };
     }
 }

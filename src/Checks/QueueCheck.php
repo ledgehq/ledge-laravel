@@ -50,6 +50,7 @@ class QueueCheck implements CheckInterface
                 'pending' => $pending,
                 'failed' => $failed,
                 'stale' => $stale,
+                'note' => $stale === null ? "Stale jobs are not observable on the {$driver} driver; see the horizon check when Horizon is installed" : null,
                 'thresholds' => [
                     'failed' => Thresholds::describe($this->settings->queueFailedDegradedAt, $this->settings->queueFailedUnhealthyAt) + ['windowSeconds' => $this->settings->queueFailedWindow],
                     'stale' => Thresholds::describe($this->settings->queueStaleDegradedAt, $this->settings->queueStaleUnhealthyAt) + ['ageSeconds' => $staleAfter],
