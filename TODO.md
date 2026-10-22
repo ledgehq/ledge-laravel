@@ -33,10 +33,12 @@ Working notes. Review and prune.
 - [ ] Add the fixtures to `ledge-craft` too, and a note in both READMEs that protocol changes update the fixtures first.
 
 ### Checks
-- [ ] Extension seams: `checks` list in `config/ledge.php` (class names, resolved from the container), closure checks (`Ledge::check('name', fn () => CheckResult::...)`), and an optional adapter for `spatie/laravel-health` checks.
-- [ ] New checks common to Laravel apps: `cache` (read/write roundtrip on the default store), `redis` (ping when any connection uses it), `horizon` (status when `laravel/horizon` is installed), `optimized` (config/route/view cached when `APP_ENV=production`), `phpVersion` (EOL), and `packages` (below).
-- [ ] `packages` check: outdated Composer packages via Packagist's `p2/{vendor}/{package}.json`, cached ~24h, with `updateAvailableStatus` / `criticalUpdateStatus` like Craft's `plugins` check. Include a `frameworkVersion` entry mirroring `craftVersion`. Do the lookup in a scheduled command and cache, not inline in the health poll.
-- [ ] Queue: Horizon-aware stats when `laravel/horizon` is installed; Redis pending count is best-effort today and `stale` is null off the database driver. Decide whether that should be surfaced as a note in the payload.
+- [x] Extension seams: `checks` list in `config/ledge.php`, `Ledge::check()` closures, and `SpatieHealthCheck::wrap()` for spatie/laravel-health checks (dev dependency only; listed under `suggest`).
+- [x] New checks: `cache`, `redis`, `horizon`, `optimized`, `phpVersion`, `packages`.
+- [x] `packages` check via `ledge:packages:refresh` (Packagist p2, Guzzle pool, snapshot in the cache, scheduled daily). No `criticalUpdateStatus`: Ledge already matches advisories through `/dependencies`, so a second signal here would duplicate it.
+- [ ] `packages`: the snapshot lives in the cache and is lost on `cache:clear` until the next refresh. Consider also writing it to `storage/framework/ledge/packages.json`.
+- [ ] `phpVersion`: the support table is a constant in `PhpVersionCheck`; it needs a line added when PHP 8.6 ships (expected late 2026).
+- [ ] `horizon` reports master supervisor state only. Horizon-aware queue stats (pending/stale per supervisor, wait times) are still open; Redis pending count is best-effort today and `stale` is null off the database driver. Decide whether that should be surfaced as a note in the payload.
 - [ ] Queue: `queue_failed_window` is a deliberate divergence from Craft (which counts all failed jobs). Confirm the Ledge dashboard copy makes sense for both.
 - [ ] Failed logins: cache buckets are lost on `cache:clear`. Consider an optional table-backed store, off by default.
 - [ ] Environment: validate against a few real apps for false positives (optional keys listed in `.env.example` with blank values will be reported as *defined* if they exist in `.env`, but *missing* if the line is absent). Document `LEDGE_IGNORED_ENV_VARS`.

@@ -8,6 +8,7 @@ use GuzzleHttp\Client;
 use GuzzleHttp\ClientInterface;
 use Illuminate\Auth\Events\Failed;
 use Illuminate\Console\Events\CommandFinished;
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Contracts\Bus\Dispatcher as BusDispatcher;
 use Illuminate\Contracts\Cache\Repository as CacheRepository;
 use Illuminate\Contracts\Events\Dispatcher;
@@ -19,16 +20,24 @@ use Illuminate\Support\ServiceProvider;
 use LedgeHQ\Ledge\Acquire\Database\DatabaseDumper;
 use LedgeHQ\Ledge\Acquire\Database\DatabaseInspector;
 use LedgeHQ\Ledge\Acquire\Database\SpatieDatabaseDumper;
+use LedgeHQ\Ledge\Checks\CacheCheck;
+use LedgeHQ\Ledge\Checks\CheckInterface;
 use LedgeHQ\Ledge\Checks\DatabaseCheck;
 use LedgeHQ\Ledge\Checks\DebugModeCheck;
 use LedgeHQ\Ledge\Checks\DiskSpaceCheck;
 use LedgeHQ\Ledge\Checks\EnvironmentCheck;
 use LedgeHQ\Ledge\Checks\FailedLoginsCheck;
+use LedgeHQ\Ledge\Checks\HorizonCheck;
 use LedgeHQ\Ledge\Checks\MemoryCheck;
+use LedgeHQ\Ledge\Checks\OptimizedCheck;
+use LedgeHQ\Ledge\Checks\PackagesCheck;
+use LedgeHQ\Ledge\Checks\PhpVersionCheck;
 use LedgeHQ\Ledge\Checks\QueueCheck;
+use LedgeHQ\Ledge\Checks\RedisCheck;
 use LedgeHQ\Ledge\Checks\SchedulerCheck;
 use LedgeHQ\Ledge\Checks\StorageCheck;
 use LedgeHQ\Ledge\Console\GenerateKeyCommand;
+use LedgeHQ\Ledge\Console\RefreshPackagesCommand;
 use LedgeHQ\Ledge\Http\Controllers\AcquireController;
 use LedgeHQ\Ledge\Http\Controllers\DependenciesController;
 use LedgeHQ\Ledge\Http\Controllers\HealthController;
@@ -37,11 +46,14 @@ use LedgeHQ\Ledge\Jobs\BackupJob;
 use LedgeHQ\Ledge\Listeners\RecordFailedLogin;
 use LedgeHQ\Ledge\Listeners\RecordSchedulerRun;
 use LedgeHQ\Ledge\Support\FailedLoginStore;
+use LedgeHQ\Ledge\Support\PackagesStore;
+use LedgeHQ\Ledge\Support\PackagistClient;
 use Psr\Log\LoggerInterface;
+use Throwable;
 
 class LedgeServiceProvider extends ServiceProvider
 {
-    /** @var list<class-string<Checks\CheckInterface>> */
+    /** @var list<class-string<CheckInterface>> */
     public const DEFAULT_CHECKS = [
         DatabaseCheck::class,
         QueueCheck::class,
@@ -52,6 +64,12 @@ class LedgeServiceProvider extends ServiceProvider
         StorageCheck::class,
         SchedulerCheck::class,
         FailedLoginsCheck::class,
+        CacheCheck::class,
+        RedisCheck::class,
+        HorizonCheck::class,
+        OptimizedCheck::class,
+        PhpVersionCheck::class,
+        PackagesCheck::class,
     ];
 
     /** @var array<string, class-string<Jobs\AbstractAcquireJob>> */
@@ -79,17 +97,39 @@ class LedgeServiceProvider extends ServiceProvider
 
         $this->registerAcquire();
 
+        $this->app->singleton(PackagesStore::class, fn (Application $app): PackagesStore => new PackagesStore($app->make(CacheRepository::class)));
+        $this->app->bind(PackagistClient::class, fn (Application $app): PackagistClient => new PackagistClient($app->make(ClientInterface::class)));
+
         $this->app->singleton(HealthService::class, function (Application $app): HealthService {
+            /** @var Settings $settings */
+            $settings = $app->make(Settings::class);
+            /** @var LoggerInterface $logger */
+            $logger = $app->make(LoggerInterface::class);
+
             $service = new HealthService(
                 $app,
-                $app->make(Settings::class),
+                $settings,
                 $app->make(DependenciesService::class),
                 $app->make(AcquireService::class),
-                $app->make(LoggerInterface::class),
+                $logger,
             );
 
-            foreach (self::DEFAULT_CHECKS as $check) {
-                $service->register($app->make($check));
+            foreach ([...self::DEFAULT_CHECKS, ...$settings->checks] as $class) {
+                try {
+                    $check = class_exists($class) ? $app->make($class) : null;
+                } catch (Throwable $e) {
+                    $logger->warning("Ledge: could not build check '{$class}': {$e->getMessage()}");
+
+                    continue;
+                }
+
+                if (! $check instanceof CheckInterface) {
+                    $logger->warning("Ledge: '{$class}' in ledge.checks is not a CheckInterface implementation; skipped");
+
+                    continue;
+                }
+
+                $service->register($check);
             }
 
             return $service;
@@ -103,11 +143,22 @@ class LedgeServiceProvider extends ServiceProvider
         ], 'ledge-config');
 
         if ($this->app->runningInConsole()) {
-            $this->commands([GenerateKeyCommand::class]);
+            $this->commands([GenerateKeyCommand::class, RefreshPackagesCommand::class]);
         }
+
+        $this->scheduleRefreshes();
 
         $this->registerListeners();
         $this->registerRoutes();
+    }
+
+    private function scheduleRefreshes(): void
+    {
+        $this->callAfterResolving(Schedule::class, function (Schedule $schedule): void {
+            if ($this->app->make(Settings::class)->packagesAutoRefresh) {
+                $schedule->command('ledge:packages:refresh')->daily()->withoutOverlapping()->name('ledge:packages:refresh');
+            }
+        });
     }
 
     private function registerAcquire(): void

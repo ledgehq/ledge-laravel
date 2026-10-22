@@ -49,15 +49,39 @@ Every check echoes the values it used under a `thresholds` key so the Ledge dash
 | `storage` | Writability of `storage/logs`, `storage/framework/*`, and `bootstrap/cache` |
 | `scheduler` | Time since `schedule:run` last completed; silent until the first run is seen |
 | `failedLogins` | Auth `Failed` events within `LEDGE_FAILED_LOGINS_WINDOW`, counted in the cache |
+| `cache` | Write/read/delete roundtrip on the default cache store |
+| `redis` | `PING` on the default Redis connection; only reported when cache, queue, session, or broadcasting use Redis |
+| `horizon` | Horizon master supervisors running / paused; only reported when `laravel/horizon` is installed |
+| `optimized` | Config, route, and event caches; trips only when `APP_ENV=production` |
+| `phpVersion` | Support phase of the running PHP branch (`active`, `security`, `eol`) |
+| `packages` | Installed Composer packages with a newer stable release on Packagist, plus `frameworkVersion` for `laravel/framework` |
 
-Add your own:
+The `packages` comparison is made by `php artisan ledge:packages:refresh`, scheduled daily by the package (turn that off with `LEDGE_PACKAGES_AUTO_REFRESH=false` and schedule it yourself). The health poll only reads the stored result and never calls Packagist.
+
+### Custom checks
+
+Three ways to add your own, all registered after the defaults:
 
 ```php
+// config/ledge.php: classes resolved from the container
+'checks' => [App\Ledge\SearchIndexCheck::class],
+
+// A service provider: a class or an inline closure
+use LedgeHQ\Ledge\Checks\CheckResult;
 use LedgeHQ\Ledge\Facades\Ledge;
 
-Ledge::register(new MyCheck());   // implements LedgeHQ\Ledge\Checks\CheckInterface
+Ledge::register(new SearchIndexCheck());   // implements LedgeHQ\Ledge\Checks\CheckInterface
+Ledge::check('search', fn (string $name) => CheckResult::healthy($name, ['documents' => 12]));
 Ledge::forget('failedLogins');
+
+// An existing spatie/laravel-health check (install that package yourself)
+use LedgeHQ\Ledge\Checks\SpatieHealthCheck;
+use Spatie\Health\Checks\Checks\UsedDiskSpaceCheck;
+
+Ledge::register(SpatieHealthCheck::wrap(UsedDiskSpaceCheck::new()));
 ```
+
+A check returns a `CheckResult` (`healthy`, `degraded`, or `unhealthy`, with a data array and an optional output line), or `null` to leave itself out of the payload for that run. Spatie statuses map `ok` → healthy, `warning` → degraded, `failed` / `crashed` → unhealthy, `skipped` → omitted.
 
 ## Dependencies
 

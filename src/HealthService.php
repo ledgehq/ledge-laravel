@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace LedgeHQ\Ledge;
 
+use Closure;
 use Illuminate\Contracts\Foundation\Application;
+use LedgeHQ\Ledge\Checks\CallbackCheck;
 use LedgeHQ\Ledge\Checks\CheckInterface;
 use LedgeHQ\Ledge\Checks\CheckResult;
 use LedgeHQ\Ledge\Checks\Thresholds;
@@ -27,6 +29,17 @@ class HealthService
     public function register(CheckInterface $check): void
     {
         $this->checks[$check->getName()] = $check;
+    }
+
+    /**
+     * Register an inline check. The callback returns a CheckResult, or null to
+     * leave the check out of the payload for that run.
+     *
+     * @param  Closure(string): ?CheckResult  $callback
+     */
+    public function check(string $name, Closure $callback): void
+    {
+        $this->register(new CallbackCheck($name, $callback));
     }
 
     public function forget(string $name): void

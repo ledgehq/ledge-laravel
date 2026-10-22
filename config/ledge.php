@@ -71,8 +71,23 @@ return [
         // 'storage' => true,
         // 'scheduler' => true,
         // 'failedLogins' => true,
+        // 'cache' => true,
+        // 'redis' => true,      // only reported when cache, queue, session, or broadcasting use Redis
+        // 'horizon' => true,    // only reported when laravel/horizon is installed
+        // 'optimized' => true,
+        // 'phpVersion' => true,
+        // 'packages' => true,
     ],
     'disabled_checks' => env('LEDGE_DISABLED_CHECKS'),
+
+    // Your own checks, registered after the defaults. Each class implements
+    // LedgeHQ\Ledge\Checks\CheckInterface and is resolved from the container.
+    // Inline alternative: Ledge::check('name', fn () => CheckResult::healthy('name'))
+    // in a service provider. Wrap spatie/laravel-health checks with
+    // LedgeHQ\Ledge\Checks\SpatieHealthCheck::wrap().
+    'checks' => [
+        // App\Ledge\SearchIndexCheck::class,
+    ],
 
     // Disk usage of the storage path, as a percentage used.
     'disk_degraded_at' => env('LEDGE_DISK_DEGRADED_AT', 80),
@@ -118,6 +133,30 @@ return [
 
     // Status when a storage or bootstrap cache directory is not writable.
     'storage_unwritable_status' => env('LEDGE_STORAGE_UNWRITABLE_STATUS', 'unhealthy'),
+
+    // Status when the default cache store fails a write/read roundtrip.
+    'cache_failure_status' => env('LEDGE_CACHE_FAILURE_STATUS', 'unhealthy'),
+
+    // Status when Redis is in use but does not answer PING.
+    'redis_failure_status' => env('LEDGE_REDIS_FAILURE_STATUS', 'unhealthy'),
+
+    // Horizon: no master supervisor running / a master is paused.
+    'horizon_stopped_status' => env('LEDGE_HORIZON_STOPPED_STATUS', 'unhealthy'),
+    'horizon_paused_status' => env('LEDGE_HORIZON_PAUSED_STATUS', 'degraded'),
+
+    // Status when APP_ENV=production and config or routes are not cached.
+    'not_optimized_status' => env('LEDGE_NOT_OPTIMIZED_STATUS', 'degraded'),
+
+    // PHP branch in security-fixes-only phase / past end of life.
+    'php_security_only_status' => env('LEDGE_PHP_SECURITY_ONLY_STATUS', 'degraded'),
+    'php_eol_status' => env('LEDGE_PHP_EOL_STATUS', 'unhealthy'),
+
+    // Status when any installed Composer package has a newer stable release.
+    // The comparison is made by `php artisan ledge:packages:refresh`, which
+    // is scheduled daily unless `packages_auto_refresh` is off; the health
+    // poll only reads the stored result.
+    'update_available_status' => env('LEDGE_UPDATE_AVAILABLE_STATUS', 'healthy'),
+    'packages_auto_refresh' => env('LEDGE_PACKAGES_AUTO_REFRESH', true),
 
     // ---------------------------------------------------------------------
     // Acquire (scheduled backups)

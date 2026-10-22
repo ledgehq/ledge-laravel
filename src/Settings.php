@@ -70,6 +70,16 @@ final class Settings
         'acquire_tmp_path' => ['string', null],
         'acquire_dump_binary_path' => ['string', null],
         'ledge_base_url' => ['string', self::DEFAULT_LEDGE_BASE_URL],
+        'checks' => ['list', []],
+        'cache_failure_status' => ['status', CheckResult::STATUS_UNHEALTHY],
+        'redis_failure_status' => ['status', CheckResult::STATUS_UNHEALTHY],
+        'horizon_stopped_status' => ['status', CheckResult::STATUS_UNHEALTHY],
+        'horizon_paused_status' => ['status', CheckResult::STATUS_DEGRADED],
+        'not_optimized_status' => ['status', CheckResult::STATUS_DEGRADED],
+        'php_security_only_status' => ['status', CheckResult::STATUS_DEGRADED],
+        'php_eol_status' => ['status', CheckResult::STATUS_UNHEALTHY],
+        'update_available_status' => ['status', CheckResult::STATUS_HEALTHY],
+        'packages_auto_refresh' => ['bool', true],
     ];
 
     public const DEFAULT_LEDGE_BASE_URL = 'https://my.ledgehq.app';
@@ -159,6 +169,27 @@ final class Settings
      */
     public readonly string $ledgeBaseUrl;
 
+    /** @var list<string> check class names registered after the defaults */
+    public readonly array $checks;
+
+    public readonly string $cacheFailureStatus;
+
+    public readonly string $redisFailureStatus;
+
+    public readonly string $horizonStoppedStatus;
+
+    public readonly string $horizonPausedStatus;
+
+    public readonly string $notOptimizedStatus;
+
+    public readonly string $phpSecurityOnlyStatus;
+
+    public readonly string $phpEolStatus;
+
+    public readonly string $updateAvailableStatus;
+
+    public readonly bool $packagesAutoRefresh;
+
     /** @var array<string, bool> */
     private readonly array $enabledChecks;
 
@@ -215,6 +246,16 @@ final class Settings
         $this->acquireTmpPath = $values['acquire_tmp_path'];
         $this->acquireDumpBinaryPath = $values['acquire_dump_binary_path'];
         $this->ledgeBaseUrl = rtrim($values['ledge_base_url'], '/');
+        $this->checks = $values['checks'];
+        $this->cacheFailureStatus = $values['cache_failure_status'];
+        $this->redisFailureStatus = $values['redis_failure_status'];
+        $this->horizonStoppedStatus = $values['horizon_stopped_status'];
+        $this->horizonPausedStatus = $values['horizon_paused_status'];
+        $this->notOptimizedStatus = $values['not_optimized_status'];
+        $this->phpSecurityOnlyStatus = $values['php_security_only_status'];
+        $this->phpEolStatus = $values['php_eol_status'];
+        $this->updateAvailableStatus = $values['update_available_status'];
+        $this->packagesAutoRefresh = $values['packages_auto_refresh'];
 
         $this->enabledChecks = self::resolveEnabledChecks($config);
     }

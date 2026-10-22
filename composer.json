@@ -26,11 +26,15 @@
     "symfony/process": "^7.0 || ^8.0",
     "vlucas/phpdotenv": "^5.6"
   },
+  "suggest": {
+    "spatie/laravel-health": "Wrap its checks with LedgeHQ\\Ledge\\Checks\\SpatieHealthCheck to expose them to Ledge"
+  },
   "require-dev": {
     "larastan/larastan": "^3.0",
     "laravel/pint": "^1.18",
     "orchestra/testbench": "^11.0",
-    "phpunit/phpunit": "^12.0"
+    "phpunit/phpunit": "^12.0",
+    "spatie/laravel-health": "^1.40"
   },
   "autoload": {
     "psr-4": {

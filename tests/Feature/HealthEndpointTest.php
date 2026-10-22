@@ -42,8 +42,13 @@ final class HealthEndpointTest extends TestCase
         $response->assertHeader('Cache-Control', 'max-age=0, must-revalidate, no-cache, no-store, private');
 
         foreach (LedgeServiceProvider::DEFAULT_CHECKS as $class) {
-            $name = $this->app->make($class)->getName();
-            self::assertArrayHasKey($name, $response->json('checks'), "check '{$name}' missing from payload");
+            $check = $this->app->make($class);
+
+            if ($check->run() === null) {
+                continue; // omitted on purpose (redis / horizon not in use here)
+            }
+
+            self::assertArrayHasKey($check->getName(), $response->json('checks'), "check '{$check->getName()}' missing from payload");
         }
 
         $response->assertJsonPath('checks.database.status', 'healthy');
