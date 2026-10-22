@@ -1,5 +1,8 @@
 # Release Notes for Ledge for Laravel
 
+## 1.0.2 - 2026-10-22
+- Fixed: the `environment` check reported every `env('X')` call in `config/` without a default as a missing variable, which on a stock Laravel app flagged dozens of optional services (`AWS_ENDPOINT`, `PUSHER_APP_KEY`, `MEMCACHED_*`, ...) and, once the config was published, the package's own `LEDGE_*` options. `.env.example` is now the only declaration: keys with a value are required and reported under `missing`, blank keys are optional and reported under `optional` without affecting the status, and `LEDGE_*` is never reported. New `source` field (`.env.example` or `null`) says where the expectations came from
+
 ## 1.0.1 - 2026-10-22
 - The `packages` check now reports `frameworkVersion.installed` from the running application on every poll, including before the first `ledge:packages:refresh`; `latest` and `updateAvailable` still come from the Packagist snapshot
 

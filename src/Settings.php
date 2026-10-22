@@ -84,6 +84,9 @@ final class Settings
 
     public const DEFAULT_LEDGE_BASE_URL = 'https://my.ledgehq.app';
 
+    /** Prefix of this package's own env vars; they all have defaults and are never "missing". */
+    public const ENV_PREFIX = 'LEDGE_';
+
     public const DEFAULT_ACQUIRE_ALLOWED_HOSTS = ['ledgehq.app', '*.ledgehq.app'];
 
     public readonly ?string $secretKey;

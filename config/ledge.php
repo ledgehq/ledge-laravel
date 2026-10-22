@@ -126,8 +126,9 @@ return [
     // Status when APP_DEBUG is on.
     'debug_mode_status' => env('LEDGE_DEBUG_MODE_STATUS', 'degraded'),
 
-    // Status when a variable listed in .env.example, or read with env() in
-    // config/ without a default, is not defined.
+    // Status when a variable declared with a value in .env.example is not
+    // defined. Blank example keys are optional and only listed; LEDGE_*
+    // options and env() calls in config/ never count.
     'missing_env_vars_status' => env('LEDGE_MISSING_ENV_VARS_STATUS', 'degraded'),
     'ignored_env_vars' => env('LEDGE_IGNORED_ENV_VARS', []),
 

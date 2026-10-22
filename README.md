@@ -45,7 +45,7 @@ Every check echoes the values it used under a `thresholds` key so the Ledge dash
 | `disk` | Usage of the storage path, plus an optional absolute free-bytes floor |
 | `memory` | PHP memory usage against `memory_limit` |
 | `debugMode` | `APP_DEBUG` on |
-| `environment` | Variables listed in `.env.example` or read with `env()` in `config/` without a default that are not defined |
+| `environment` | Variables declared with a value in `.env.example` that are not defined; blank example keys are listed as `optional` and never trip |
 | `storage` | Writability of `storage/logs`, `storage/framework/*`, and `bootstrap/cache` |
 | `scheduler` | Time since `schedule:run` last completed; silent until the first run is seen |
 | `failedLogins` | Auth `Failed` events within `LEDGE_FAILED_LOGINS_WINDOW`, counted in the cache |

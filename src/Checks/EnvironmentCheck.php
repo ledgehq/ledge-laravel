@@ -13,12 +13,20 @@ use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
- * Flags environment variables the app expects but the environment does not
- * define. "Expected" is every key in `.env.example` plus every `env('X')`
- * call in `config/` with no default argument. "Defined" consults the real
- * process environment and the `.env` file directly, because with a cached
- * config Laravel never loads `.env` and `env()` would report everything as
- * missing.
+ * Flags environment variables the project declares but the environment does
+ * not define. `.env.example` is the declaration: a key with a value
+ * (`QUEUE_CONNECTION=database`) is required, a key left blank
+ * (`AWS_ACCESS_KEY_ID=`) is optional and only listed for information.
+ *
+ * `env('X')` calls in `config/` are deliberately not treated as required:
+ * Laravel's own skeleton reads dozens of optional services that way
+ * (`env('AWS_ENDPOINT')`, `env('PUSHER_APP_KEY')`), so counting them makes
+ * every app look misconfigured. This package's own `LEDGE_*` options always
+ * have defaults and are never reported.
+ *
+ * "Defined" consults the real process environment and the `.env` file
+ * directly, because with a cached config Laravel never loads `.env` and
+ * `env()` would report everything as missing.
  */
 class EnvironmentCheck implements CheckInterface
 {
@@ -37,19 +45,23 @@ class EnvironmentCheck implements CheckInterface
     public function run(): ?CheckResult
     {
         try {
-            $expected = array_unique([...$this->keysFromExample(), ...$this->keysFromConfig()]);
+            $example = $this->exampleKeys();
             $defined = $this->definedKeys();
             $missingStatus = $this->settings->missingEnvVarsStatus;
 
-            $missing = array_values(array_filter(
-                $expected,
-                fn (string $key): bool => ! isset($defined[$key]) && ! in_array($key, $this->settings->ignoredEnvVars, true),
-            ));
+            $undefined = fn (string $key): bool => ! isset($defined[$key]) && ! $this->isIgnored($key);
+
+            $required = array_keys(array_filter($example, fn (bool $hasValue): bool => $hasValue));
+            $missing = array_values(array_filter($required, $undefined));
+            $optional = array_values(array_filter(array_keys(array_filter($example, fn (bool $hasValue): bool => ! $hasValue)), $undefined));
             sort($missing);
+            sort($optional);
 
             $meta = [
                 'missing' => $missing,
-                'expected' => count($expected),
+                'optional' => $optional,
+                'expected' => count($required),
+                'source' => $example === [] ? null : '.env.example',
                 'php' => PHP_VERSION,
                 'os' => php_uname('s').' '.php_uname('r'),
                 'database' => $this->databaseVersion(),
@@ -57,7 +69,7 @@ class EnvironmentCheck implements CheckInterface
             ];
 
             if ($missing !== [] && $missingStatus !== CheckResult::STATUS_HEALTHY) {
-                return new CheckResult($this->getName(), $missingStatus, $meta, count($missing).' environment variable(s) expected but not defined');
+                return new CheckResult($this->getName(), $missingStatus, $meta, count($missing).' environment variable(s) declared in .env.example but not defined');
             }
 
             return CheckResult::healthy($this->getName(), $meta);
@@ -68,10 +80,15 @@ class EnvironmentCheck implements CheckInterface
         }
     }
 
+    private function isIgnored(string $key): bool
+    {
+        return str_starts_with($key, Settings::ENV_PREFIX) || in_array($key, $this->settings->ignoredEnvVars, true);
+    }
+
     /**
-     * @return list<string>
+     * @return array<string, bool> key => whether the example gives it a value
      */
-    private function keysFromExample(): array
+    private function exampleKeys(): array
     {
         $path = $this->app->basePath('.env.example');
 
@@ -79,24 +96,21 @@ class EnvironmentCheck implements CheckInterface
             return [];
         }
 
-        return array_keys(Dotenv::parse((string) file_get_contents($path)));
+        return self::parseExample((string) file_get_contents($path));
     }
 
     /**
-     * @return list<string>
+     * @return array<string, bool> key => whether the example gives it a value
      */
-    private function keysFromConfig(): array
+    public static function parseExample(string $contents): array
     {
         $keys = [];
-        $files = glob($this->app->configPath().'/*.php') ?: [];
 
-        foreach ($files as $file) {
-            $content = (string) file_get_contents($file);
-            preg_match_all('/\benv\(\s*[\'"]([A-Z0-9_]+)[\'"]\s*\)/', $content, $matches);
-            array_push($keys, ...$matches[1]);
+        foreach (Dotenv::parse($contents) as $key => $value) {
+            $keys[(string) $key] = trim((string) $value) !== '';
         }
 
-        return array_values(array_unique($keys));
+        return $keys;
     }
 
     /**
