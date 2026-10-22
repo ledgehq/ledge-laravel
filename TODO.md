@@ -53,7 +53,7 @@ Deferred 2026-10-22 until the Ledge service reads the Laravel payload; do this b
 - [x] GitHub Actions: PHP 8.3 / 8.4 × Laravel 13 running `composer test`, `check-cs`, `phpstan` (`.github/workflows/ci.yml`).
 - [x] Composer is not on the host PATH; documented in `CLAUDE.md`.
 - [ ] Decide how the package is distributed: public Packagist with `proprietary` license (as `ledge-craft` does) vs. a private Composer repo. Affects the Craft 6 plugin later (Plugin Store plugins can require any Packagist package).
-- [ ] Tag `1.0.0`; date the CHANGELOG.
+- [x] Tagged `1.0.0` on 2026-10-22; later releases: date the changelog entry, tag, push, Packagist picks it up via the GitHub hook.
 - [ ] Create a `ledgehq/test-laravel` app (like `test-craft-5`) to exercise the endpoints for real, including `config:cache`, `route:cache`, and a queued backup against MySQL.
 
 ## Ledge service
