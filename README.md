@@ -4,8 +4,8 @@ Health, uptime, and compliance monitoring for Laravel applications. This package
 
 ## Requirements
 
-- PHP 8.2+
-- Laravel 11, 12, or 13
+- PHP 8.3+ with the `sodium` and `zlib` extensions
+- Laravel 13+
 
 ## Installation
 
@@ -62,6 +62,14 @@ Ledge::forget('failedLogins');
 ## Dependencies
 
 `GET /_ledge/dependencies` returns the installed Composer package set (`{composer: [{name, version}], generatedAt, hash}`) for security-advisory matching, read from Composer's runtime data rather than the lockfile. The health payload carries the same `hash` as `dependenciesHash` and a `composerLockHash` of the raw `composer.lock`. Turn the endpoint off with `LEDGE_DEPENDENCIES_ENABLED=false`.
+
+## Backups
+
+With `LEDGE_ACQUIRE_ENABLED=true`, Ledge can command the app to dump its database, encrypt the dump to a one-time key, and upload it to Ledge's storage. Commands are Ed25519-signed by Ledge, verified against keys discovered from the Ledge service, replay-guarded, and restricted to allowlisted upload and callback hosts. The work runs as a queued job (`LedgeHQ\Ledge\Jobs\BackupJob`), so a queue worker must be running.
+
+The dump uses `mysqldump`, `mariadb-dump`, `pg_dump`, or `sqlite3` via [spatie/db-dumper](https://github.com/spatie/db-dumper); point `LEDGE_ACQUIRE_DUMP_BINARY_PATH` at the directory holding the binary if it is not on the worker's `PATH`. To use a different dump pipeline, bind your own `LedgeHQ\Ledge\Acquire\Database\DatabaseDumper`.
+
+See [docs/acquire-protocol.md](docs/acquire-protocol.md) for the protocol, every config option, and the failure reasons.
 
 ## Development
 

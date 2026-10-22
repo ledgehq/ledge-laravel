@@ -25,8 +25,9 @@ final class Settings
     private const NULLABLE_TYPES = ['int', 'percent'];
 
     /**
-     * option => [type, default]. Types: string, bool, int (nullable, >= 0),
-     * percent (nullable, 0-100), seconds (required, > 0), status, list.
+     * option => [type, default]. Types: string, bool, int (nullable,
+     * >= 0), percent (nullable, 0-100), seconds / positive (required, > 0),
+     * status, list (an empty list falls back to the default).
      *
      * @var array<string, array{0: string, 1: mixed}>
      */
@@ -58,7 +59,22 @@ final class Settings
         'missing_env_vars_status' => ['status', CheckResult::STATUS_DEGRADED],
         'ignored_env_vars' => ['list', []],
         'storage_unwritable_status' => ['status', CheckResult::STATUS_UNHEALTHY],
+        'acquire_enabled' => ['bool', false],
+        'acquire_path' => ['string', '_ledge/acquire'],
+        'acquire_allowed_hosts' => ['list', self::DEFAULT_ACQUIRE_ALLOWED_HOSTS],
+        'acquire_allow_insecure' => ['bool', false],
+        'acquire_max_bundle_bytes' => ['positive', 524288000],
+        'acquire_job_timeout' => ['positive', 3600],
+        'acquire_queue' => ['string', null],
+        'acquire_queue_connection' => ['string', null],
+        'acquire_tmp_path' => ['string', null],
+        'acquire_dump_binary_path' => ['string', null],
+        'ledge_base_url' => ['string', self::DEFAULT_LEDGE_BASE_URL],
     ];
+
+    public const DEFAULT_LEDGE_BASE_URL = 'https://my.ledgehq.app';
+
+    public const DEFAULT_ACQUIRE_ALLOWED_HOSTS = ['ledgehq.app', '*.ledgehq.app'];
 
     public readonly ?string $secretKey;
 
@@ -115,6 +131,34 @@ final class Settings
 
     public readonly string $storageUnwritableStatus;
 
+    public readonly bool $acquireEnabled;
+
+    public readonly string $acquirePath;
+
+    /** @var list<string> */
+    public readonly array $acquireAllowedHosts;
+
+    public readonly bool $acquireAllowInsecure;
+
+    public readonly int $acquireMaxBundleBytes;
+
+    public readonly int $acquireJobTimeout;
+
+    public readonly ?string $acquireQueue;
+
+    public readonly ?string $acquireQueueConnection;
+
+    public readonly ?string $acquireTmpPath;
+
+    public readonly ?string $acquireDumpBinaryPath;
+
+    /**
+     * Trust anchor for signing-key discovery. Deliberately file-config only:
+     * config/ledge.php does not read it from env, and it is never derived
+     * from an incoming command.
+     */
+    public readonly string $ledgeBaseUrl;
+
     /** @var array<string, bool> */
     private readonly array $enabledChecks;
 
@@ -160,6 +204,17 @@ final class Settings
         $this->missingEnvVarsStatus = $values['missing_env_vars_status'];
         $this->ignoredEnvVars = $values['ignored_env_vars'];
         $this->storageUnwritableStatus = $values['storage_unwritable_status'];
+        $this->acquireEnabled = $values['acquire_enabled'];
+        $this->acquirePath = $values['acquire_path'];
+        $this->acquireAllowedHosts = $values['acquire_allowed_hosts'];
+        $this->acquireAllowInsecure = $values['acquire_allow_insecure'];
+        $this->acquireMaxBundleBytes = $values['acquire_max_bundle_bytes'];
+        $this->acquireJobTimeout = $values['acquire_job_timeout'];
+        $this->acquireQueue = $values['acquire_queue'];
+        $this->acquireQueueConnection = $values['acquire_queue_connection'];
+        $this->acquireTmpPath = $values['acquire_tmp_path'];
+        $this->acquireDumpBinaryPath = $values['acquire_dump_binary_path'];
+        $this->ledgeBaseUrl = rtrim($values['ledge_base_url'], '/');
 
         $this->enabledChecks = self::resolveEnabledChecks($config);
     }
@@ -181,6 +236,8 @@ final class Settings
 
                 if ($coerced === self::INVALID) {
                     $logger?->warning("Ledge: invalid value for '{$key}', using the default", ['value' => $raw]);
+                } elseif ($type === 'list') {
+                    $value = $coerced === [] ? $default : $coerced;
                 } elseif ($coerced !== null || in_array($type, self::NULLABLE_TYPES, true)) {
                     $value = $coerced;
                 }
@@ -229,7 +286,7 @@ final class Settings
             'bool' => self::coerceBool($value),
             'int' => self::coerceInt($value, 0, null),
             'percent' => self::coerceInt($value, 0, 100),
-            'seconds' => self::coerceInt($value, 1, null) ?? self::INVALID,
+            'seconds', 'positive' => self::coerceInt($value, 1, null) ?? self::INVALID,
             'status' => is_string($value) && in_array(strtolower($value), self::STATUS_LEVELS, true) ? strtolower($value) : self::INVALID,
             'list' => self::coerceList($value),
             default => self::INVALID,

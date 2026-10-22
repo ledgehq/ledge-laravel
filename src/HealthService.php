@@ -20,6 +20,7 @@ class HealthService
         private readonly Application $app,
         private readonly Settings $settings,
         private readonly DependenciesService $dependencies,
+        private readonly AcquireService $acquire,
         private readonly LoggerInterface $logger,
     ) {}
 
@@ -69,11 +70,15 @@ class HealthService
             $overallStatus = Thresholds::worst($overallStatus, $result->status);
         }
 
+        $acquireEnabled = $this->acquire->isEnabled();
+
         $payload = [
             'status' => $overallStatus,
             'platform' => $this->platform(),
-            'acquireEnabled' => false,
-            'backupProfileSupported' => false,
+            'acquireEnabled' => $acquireEnabled,
+            'backupProfileSupported' => $acquireEnabled && $this->acquire->supportsProfile('backup'),
+            'capabilities' => $acquireEnabled ? $this->acquire->supportedProfiles() : [],
+            'updateTest' => ['strategy' => 'testsuite'],
         ];
 
         if ($this->settings->dependenciesEnabled) {

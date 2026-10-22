@@ -118,4 +118,41 @@ return [
 
     // Status when a storage or bootstrap cache directory is not writable.
     'storage_unwritable_status' => env('LEDGE_STORAGE_UNWRITABLE_STATUS', 'unhealthy'),
+
+    // ---------------------------------------------------------------------
+    // Acquire (scheduled backups)
+    // ---------------------------------------------------------------------
+
+    // Lets Ledge command this app to dump its database, encrypt the dump to a
+    // per-run key, and upload it. Off by default; while off the acquire
+    // routes are not registered. See docs/acquire-protocol.md.
+    'acquire_enabled' => env('LEDGE_ACQUIRE_ENABLED', false),
+    'acquire_path' => env('LEDGE_ACQUIRE_PATH', '_ledge/acquire'),
+
+    // Hosts that bundle uploads and callbacks may be sent to. Replaces the
+    // default (ledgehq.app and its subdomains) entirely when set.
+    // Env alternative: LEDGE_ACQUIRE_ALLOWED_HOSTS=ledge.example.com,*.example.com
+    'acquire_allowed_hosts' => env('LEDGE_ACQUIRE_ALLOWED_HOSTS', ['ledgehq.app', '*.ledgehq.app']),
+
+    // Accept plain-http upload and callback URLs. Local development only.
+    'acquire_allow_insecure' => env('LEDGE_ACQUIRE_ALLOW_INSECURE', false),
+
+    // Compressed archive size cap (bytes) and the queued job's timeout
+    // (seconds). Queue connection and name are the app defaults unless set.
+    'acquire_max_bundle_bytes' => env('LEDGE_ACQUIRE_MAX_BUNDLE_BYTES', 524288000),
+    'acquire_job_timeout' => env('LEDGE_ACQUIRE_JOB_TIMEOUT', 3600),
+    'acquire_queue' => env('LEDGE_ACQUIRE_QUEUE'),
+    'acquire_queue_connection' => env('LEDGE_ACQUIRE_QUEUE_CONNECTION'),
+
+    // Where the dump and archive are staged. Defaults to storage/framework/ledge.
+    'acquire_tmp_path' => env('LEDGE_ACQUIRE_TMP_PATH'),
+
+    // Directory holding mysqldump / mariadb-dump / pg_dump / sqlite3 when it
+    // is not on PATH.
+    'acquire_dump_binary_path' => env('LEDGE_ACQUIRE_DUMP_BINARY_PATH'),
+
+    // Base URL of the Ledge service used to discover command-signing keys.
+    // Deliberately not read from the environment: it is a trust anchor. You
+    // should not need to change this.
+    'ledge_base_url' => 'https://my.ledgehq.app',
 ];
