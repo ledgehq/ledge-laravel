@@ -1,6 +1,6 @@
 # Release Notes for Ledge for Laravel
 
-## Unreleased
+## 1.0.1 - 2026-10-22
 - The `packages` check now reports `frameworkVersion.installed` from the running application on every poll, including before the first `ledge:packages:refresh`; `latest` and `updateAvailable` still come from the Packagist snapshot
 
 ## 1.0.0 - 2026-10-22
