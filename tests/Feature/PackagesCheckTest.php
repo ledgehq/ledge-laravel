@@ -38,6 +38,7 @@ final class PackagesCheckTest extends TestCase
         $this->health()
             ->assertJsonPath('checks.packages.status', 'healthy')
             ->assertJsonPath('checks.packages.refreshedAt', null)
+            ->assertJsonPath('checks.packages.frameworkVersion', ['installed' => $this->app->version(), 'latest' => null, 'updateAvailable' => false])
             ->assertJsonPath('checks.packages.output', 'Run `php artisan ledge:packages:refresh` to populate this check');
     }
 
@@ -77,7 +78,7 @@ final class PackagesCheckTest extends TestCase
             ->assertJsonPath('checks.packages.outdatedCount', 1)
             ->assertJsonPath('checks.packages.notOnPackagist', 1)
             ->assertJsonPath('checks.packages.outdated', [['name' => 'laravel/framework', 'installed' => '13.30.1', 'latest' => '13.38.0']])
-            ->assertJsonPath('checks.packages.frameworkVersion', ['installed' => '13.30.1', 'latest' => '13.38.0', 'updateAvailable' => true]);
+            ->assertJsonPath('checks.packages.frameworkVersion', ['installed' => $this->app->version(), 'latest' => '13.38.0', 'updateAvailable' => true]);
 
         self::assertNotNull($response->json('checks.packages.refreshedAt'));
 

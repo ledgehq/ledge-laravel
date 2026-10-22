@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace LedgeHQ\Ledge\Checks;
 
+use Illuminate\Contracts\Foundation\Application;
 use LedgeHQ\Ledge\Settings;
 use LedgeHQ\Ledge\Support\PackagesStore;
+use Throwable;
 
 /**
  * Outdated Composer packages, from the snapshot `ledge:packages:refresh`
@@ -13,13 +15,16 @@ use LedgeHQ\Ledge\Support\PackagesStore;
  * refresh the check is healthy with `refreshedAt: null`.
  *
  * `frameworkVersion` mirrors the Craft plugin's `craftVersion` check so the
- * Ledge dashboard can show the platform version in the same place.
+ * Ledge dashboard can show the platform version in the same place. Its
+ * `installed` value comes from the running application, so it is present
+ * before the first refresh; `latest` and `updateAvailable` fill in after.
  */
 class PackagesCheck implements CheckInterface
 {
     public const FRAMEWORK = 'laravel/framework';
 
     public function __construct(
+        private readonly Application $app,
         private readonly PackagesStore $store,
         private readonly Settings $settings,
     ) {}
@@ -40,7 +45,7 @@ class PackagesCheck implements CheckInterface
             'outdatedCount' => null,
             'outdated' => [],
             'notOnPackagist' => null,
-            'frameworkVersion' => null,
+            'frameworkVersion' => ['installed' => $this->appVersion(), 'latest' => null, 'updateAvailable' => false],
             'thresholds' => ['updateAvailableStatus' => $updateStatus],
         ];
 
@@ -53,7 +58,7 @@ class PackagesCheck implements CheckInterface
         foreach ($snapshot['packages'] as $package) {
             if ($package['name'] === self::FRAMEWORK) {
                 $meta['frameworkVersion'] = [
-                    'installed' => $package['installed'],
+                    'installed' => $meta['frameworkVersion']['installed'] ?? $package['installed'],
                     'latest' => $package['latest'],
                     'updateAvailable' => $package['updateAvailable'],
                 ];
@@ -75,5 +80,14 @@ class PackagesCheck implements CheckInterface
         }
 
         return CheckResult::healthy($this->getName(), $meta);
+    }
+
+    private function appVersion(): ?string
+    {
+        try {
+            return ltrim($this->app->version(), 'v');
+        } catch (Throwable) {
+            return null;
+        }
     }
 }

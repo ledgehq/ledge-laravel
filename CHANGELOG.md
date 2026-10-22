@@ -1,5 +1,8 @@
 # Release Notes for Ledge for Laravel
 
+## Unreleased
+- The `packages` check now reports `frameworkVersion.installed` from the running application on every poll, including before the first `ledge:packages:refresh`; `latest` and `updateAvailable` still come from the Packagist snapshot
+
 ## 1.0.0 - 2026-10-22
 - Added checks: `cache` (roundtrip on the default store), `redis` (`PING`, only when cache/queue/session/broadcasting use Redis), `horizon` (master supervisor state plus supervisor, process, wait-time, and recent-failure figures, only when Horizon is installed; the `queue` check notes when staleness is not observable on its driver), `optimized` (config/route/event caches, enforced in production), `phpVersion` (support phase from php.net's calendar), and `packages` (outdated Composer packages with a `frameworkVersion` entry, read from the snapshot `ledge:packages:refresh` stores; scheduled daily unless `packages_auto_refresh` is off). Each has a status option: `cache_failure_status`, `redis_failure_status`, `horizon_stopped_status` / `horizon_paused_status`, `not_optimized_status`, `php_security_only_status` / `php_eol_status`, `update_available_status`
 - Custom checks can be listed as class names under `checks` in `config/ledge.php`, registered inline with `Ledge::check('name', fn () => ...)`, or wrapped from spatie/laravel-health with `SpatieHealthCheck::wrap()`. A listed class that cannot be built is logged and skipped rather than breaking the health endpoint
