@@ -173,7 +173,7 @@ final class AcquireEndpointTest extends TestCase
     {
         $this->health()
             ->assertJsonPath('acquireEnabled', true)
-            ->assertJsonPath('backupProfileSupported', true)
+            ->assertJsonMissingPath('backupProfileSupported')
             ->assertJsonPath('capabilities', ['backup'])
             ->assertJsonPath('updateTest.strategy', 'testsuite');
     }

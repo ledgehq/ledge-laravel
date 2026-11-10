@@ -48,10 +48,10 @@ return [
 The `/health` payload advertises the capability:
 
 ```json
-{ "acquireEnabled": true, "backupProfileSupported": true, "capabilities": ["backup"], "updateTest": { "strategy": "testsuite" } }
+{ "acquireEnabled": true, "capabilities": ["backup"], "updateTest": { "strategy": "testsuite" } }
 ```
 
-`capabilities` lists the registered profiles when acquire is on (empty when off). `updateTest.strategy` tells Ledge how to test updates for this platform: Laravel apps run their own test suite; Craft sites are crawled. The two booleans are kept while the Ledge service still reads them.
+`capabilities` lists the registered profiles when acquire is on (empty when off). `updateTest.strategy` tells Ledge how to test updates for this platform: Laravel apps run their own test suite; Craft sites are crawled. Ledge reads `capabilities` and, for Craft plugins that predate it, the `acquireEnabled` / `backupProfileSupported` booleans; this package no longer sends `backupProfileSupported`.
 
 ## Command contract
 

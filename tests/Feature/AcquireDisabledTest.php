@@ -22,7 +22,6 @@ final class AcquireDisabledTest extends TestCase
     {
         $this->health()
             ->assertJsonPath('acquireEnabled', false)
-            ->assertJsonPath('backupProfileSupported', false)
             ->assertJsonPath('capabilities', [])
             ->assertJsonPath('updateTest.strategy', 'testsuite');
     }

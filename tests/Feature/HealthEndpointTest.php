@@ -36,7 +36,7 @@ final class HealthEndpointTest extends TestCase
     {
         $response = $this->health()->assertOk();
 
-        $response->assertJsonStructure(['status', 'platform' => ['name', 'version', 'edition', 'environment'], 'acquireEnabled', 'backupProfileSupported', 'dependenciesHash', 'composerLockHash', 'checks']);
+        $response->assertJsonStructure(['status', 'platform' => ['name', 'version', 'edition', 'environment'], 'acquireEnabled', 'capabilities', 'updateTest' => ['strategy'], 'dependenciesHash', 'composerLockHash', 'checks']);
         $response->assertJsonPath('platform.name', 'laravel');
         $response->assertJsonPath('acquireEnabled', false);
         $response->assertHeader('Cache-Control', 'max-age=0, must-revalidate, no-cache, no-store, private');

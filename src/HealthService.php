@@ -89,7 +89,6 @@ class HealthService
             'status' => $overallStatus,
             'platform' => $this->platform(),
             'acquireEnabled' => $acquireEnabled,
-            'backupProfileSupported' => $acquireEnabled && $this->acquire->supportsProfile('backup'),
             'capabilities' => $acquireEnabled ? $this->acquire->supportedProfiles() : [],
             'updateTest' => ['strategy' => 'testsuite'],
         ];
