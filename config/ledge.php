@@ -152,6 +152,11 @@ return [
     'php_security_only_status' => env('LEDGE_PHP_SECURITY_ONLY_STATUS', 'degraded'),
     'php_eol_status' => env('LEDGE_PHP_EOL_STATUS', 'unhealthy'),
 
+    // Days before the branch's end of life that trip each tier, whatever its
+    // phase (null = tier disabled). The worse of this and the phase wins.
+    'php_eol_degraded_within_days' => env('LEDGE_PHP_EOL_DEGRADED_WITHIN_DAYS'),
+    'php_eol_unhealthy_within_days' => env('LEDGE_PHP_EOL_UNHEALTHY_WITHIN_DAYS', 90),
+
     // Status when any installed Composer package has a newer stable release.
     // The comparison is made by `php artisan ledge:packages:refresh`, which
     // is scheduled daily unless `packages_auto_refresh` is off; the health
@@ -179,6 +184,9 @@ return [
 
     // Compressed archive size cap (bytes) and the queued job's timeout
     // (seconds). Queue connection and name are the app defaults unless set.
+    // Laravel queues have no job priority; to keep backups from waiting
+    // behind a backlog, set a dedicated queue and list it first on the
+    // worker (`queue:work --queue=ledge,default`) or in Horizon's `queue`.
     'acquire_max_bundle_bytes' => env('LEDGE_ACQUIRE_MAX_BUNDLE_BYTES', 524288000),
     'acquire_job_timeout' => env('LEDGE_ACQUIRE_JOB_TIMEOUT', 3600),
     'acquire_queue' => env('LEDGE_ACQUIRE_QUEUE'),

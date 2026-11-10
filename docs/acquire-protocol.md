@@ -169,7 +169,7 @@ Best-effort `POST` to `callback_url` with `Authorization: Bearer <callback_token
 
 The `manifest` step is kept for parity with the Craft plugin's step list even though the `backup` profile adds nothing in it.
 
-`acquire.accepted` is sent after the job is dispatched. On the `sync` queue driver the whole run therefore happens inside the request and `accepted` arrives after `completed`; Ledge treats late events as already handled. Use a real queue driver for backups.
+`acquire.accepted` is sent after the job is dispatched. On the `sync` queue driver the whole run therefore happens inside the request and `accepted` arrives after `completed`; Ledge treats late events as already handled. Use a real queue driver for backups. Laravel queues have no job priority, so to keep a backup from waiting behind a backlog, set `acquire_queue` to a dedicated queue and list it first on the worker (`queue:work --queue=ledge,default`) or in Horizon's supervisor `queue`.
 
 ## Status endpoint (pull fallback)
 

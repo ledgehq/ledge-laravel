@@ -78,6 +78,8 @@ final class Settings
         'not_optimized_status' => ['status', CheckResult::STATUS_DEGRADED],
         'php_security_only_status' => ['status', CheckResult::STATUS_DEGRADED],
         'php_eol_status' => ['status', CheckResult::STATUS_UNHEALTHY],
+        'php_eol_degraded_within_days' => ['int', null],
+        'php_eol_unhealthy_within_days' => ['int', 90],
         'update_available_status' => ['status', CheckResult::STATUS_HEALTHY],
         'packages_auto_refresh' => ['bool', true],
     ];
@@ -189,6 +191,10 @@ final class Settings
 
     public readonly string $phpEolStatus;
 
+    public readonly ?int $phpEolDegradedWithinDays;
+
+    public readonly ?int $phpEolUnhealthyWithinDays;
+
     public readonly string $updateAvailableStatus;
 
     public readonly bool $packagesAutoRefresh;
@@ -257,6 +263,8 @@ final class Settings
         $this->notOptimizedStatus = $values['not_optimized_status'];
         $this->phpSecurityOnlyStatus = $values['php_security_only_status'];
         $this->phpEolStatus = $values['php_eol_status'];
+        $this->phpEolDegradedWithinDays = $values['php_eol_degraded_within_days'];
+        $this->phpEolUnhealthyWithinDays = $values['php_eol_unhealthy_within_days'];
         $this->updateAvailableStatus = $values['update_available_status'];
         $this->packagesAutoRefresh = $values['packages_auto_refresh'];
 

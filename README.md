@@ -53,7 +53,7 @@ Every check echoes the values it used under a `thresholds` key so the Ledge dash
 | `redis` | `PING` on the default Redis connection; only reported when cache, queue, session, or broadcasting use Redis |
 | `horizon` | Horizon master supervisors running / paused, plus supervisors, processes, per-queue wait times, and recently failed jobs; only reported when `laravel/horizon` is installed |
 | `optimized` | Config, route, and event caches; trips only when `APP_ENV=production` |
-| `phpVersion` | Support phase of the running PHP branch (`active`, `security`, `eol`) |
+| `phpVersion` | Support phase of the running PHP branch (`active`, `security`, `eol`) against php.net's release calendar, and days until its end of life (`unhealthy` within 90 by default) |
 | `packages` | Installed Composer packages with a newer stable release on Packagist, plus `frameworkVersion` for `laravel/framework` |
 
 The `packages` comparison is made by `php artisan ledge:packages:refresh`, scheduled daily by the package (turn that off with `LEDGE_PACKAGES_AUTO_REFRESH=false` and schedule it yourself). The health poll only reads the stored result and never calls Packagist.
@@ -90,6 +90,15 @@ A check returns a `CheckResult` (`healthy`, `degraded`, or `unhealthy`, with a d
 ## Backups
 
 With `LEDGE_ACQUIRE_ENABLED=true`, Ledge can command the app to dump its database, encrypt the dump to a one-time key, and upload it to Ledge's storage. Commands are Ed25519-signed by Ledge, verified against keys discovered from the Ledge service, replay-guarded, and restricted to allowlisted upload and callback hosts. The work runs as a queued job (`LedgeHQ\Ledge\Jobs\BackupJob`), so a queue worker must be running.
+
+Laravel queues have no job priority, so a backup dispatched behind a long backlog can wait until it times out. Give it its own queue and have the worker drain that queue first:
+
+```bash
+# .env: LEDGE_ACQUIRE_QUEUE=ledge
+php artisan queue:work --queue=ledge,default
+```
+
+With Horizon, put `ledge` first in the supervisor's `queue` list instead.
 
 The dump uses `mysqldump`, `mariadb-dump`, `pg_dump`, or `sqlite3` via [spatie/db-dumper](https://github.com/spatie/db-dumper); point `LEDGE_ACQUIRE_DUMP_BINARY_PATH` at the directory holding the binary if it is not on the worker's `PATH`. To use a different dump pipeline, bind your own `LedgeHQ\Ledge\Acquire\Database\DatabaseDumper`.
 

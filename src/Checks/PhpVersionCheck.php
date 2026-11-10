@@ -6,12 +6,17 @@ namespace LedgeHQ\Ledge\Checks;
 
 use Closure;
 use LedgeHQ\Ledge\Settings;
+use Psr\Log\LoggerInterface;
+use Throwable;
 
 /**
  * Support phase of the running PHP branch against php.net's release
  * calendar. `active` is healthy, `security` (bug fixes have stopped) reports
- * `php_security_only_status`, `eol` reports `php_eol_status`. Branches the
- * table does not know are reported as `unknown` and never trip.
+ * `php_security_only_status`, `eol` reports `php_eol_status`. Independently
+ * of the phase, a branch within `php_eol_degraded_within_days` /
+ * `php_eol_unhealthy_within_days` of its end of life trips that tier; the
+ * worse of the two wins. Branches the table does not know are reported as
+ * `unknown` and never trip. Mirrors the Craft plugin's `phpVersion` check.
  */
 class PhpVersionCheck implements CheckInterface
 {
@@ -35,6 +40,7 @@ class PhpVersionCheck implements CheckInterface
         private readonly Settings $settings,
         private readonly ?string $version = null,
         private readonly ?Closure $now = null,
+        private readonly ?LoggerInterface $logger = null,
     ) {}
 
     public function getName(): string
@@ -43,6 +49,17 @@ class PhpVersionCheck implements CheckInterface
     }
 
     public function run(): ?CheckResult
+    {
+        try {
+            return $this->evaluate();
+        } catch (Throwable $e) {
+            $this->logger?->error('Ledge phpVersion check failed: '.$e->getMessage());
+
+            return CheckResult::degraded($this->getName(), [], 'Check unavailable');
+        }
+    }
+
+    private function evaluate(): CheckResult
     {
         $version = $this->version ?? PHP_VERSION;
         $branch = implode('.', array_slice(explode('.', $version), 0, 2));
@@ -62,6 +79,11 @@ class PhpVersionCheck implements CheckInterface
 
         $eolStatus = $this->settings->phpEolStatus;
         $securityStatus = $this->settings->phpSecurityOnlyStatus;
+        $degradedWithin = $this->settings->phpEolDegradedWithinDays;
+        $unhealthyWithin = $this->settings->phpEolUnhealthyWithinDays;
+        $daysUntilEol = $support !== null && $phase !== 'eol'
+            ? intdiv(self::endOfDay($support[1]) - $now, 86400)
+            : null;
 
         $meta = [
             'version' => $version,
@@ -69,18 +91,39 @@ class PhpVersionCheck implements CheckInterface
             'phase' => $phase,
             'activeSupportUntil' => $support[0] ?? null,
             'securitySupportUntil' => $support[1] ?? null,
-            'thresholds' => ['securityOnlyStatus' => $securityStatus, 'eolStatus' => $eolStatus],
+            'daysUntilEol' => $daysUntilEol,
+            'thresholds' => [
+                'securityOnlyStatus' => $securityStatus,
+                'eolStatus' => $eolStatus,
+                'eolDegradedWithinDays' => $degradedWithin,
+                'eolUnhealthyWithinDays' => $unhealthyWithin,
+            ],
         ];
 
-        if ($phase === 'eol' && $eolStatus !== CheckResult::STATUS_HEALTHY) {
-            return new CheckResult($this->getName(), $eolStatus, $meta, "PHP {$branch} reached end of life on {$support[1]}");
+        [$status, $output] = match ($phase) {
+            'eol' => [$eolStatus, "PHP {$branch} reached end of life on {$support[1]}"],
+            'security' => [$securityStatus, "PHP {$branch} receives security fixes only until {$support[1]}"],
+            default => [CheckResult::STATUS_HEALTHY, null],
+        };
+
+        if ($daysUntilEol !== null) {
+            $approaching = match (true) {
+                $unhealthyWithin !== null && $daysUntilEol <= $unhealthyWithin => CheckResult::STATUS_UNHEALTHY,
+                $degradedWithin !== null && $daysUntilEol <= $degradedWithin => CheckResult::STATUS_DEGRADED,
+                default => CheckResult::STATUS_HEALTHY,
+            };
+
+            if (Thresholds::worst($status, $approaching) !== $status) {
+                $status = $approaching;
+                $output = "PHP {$branch} reaches end of life on {$support[1]} ({$daysUntilEol} days)";
+            }
         }
 
-        if ($phase === 'security' && $securityStatus !== CheckResult::STATUS_HEALTHY) {
-            return new CheckResult($this->getName(), $securityStatus, $meta, "PHP {$branch} receives security fixes only until {$support[1]}");
+        if ($status === CheckResult::STATUS_HEALTHY) {
+            return CheckResult::healthy($this->getName(), $meta);
         }
 
-        return CheckResult::healthy($this->getName(), $meta);
+        return new CheckResult($this->getName(), $status, $meta, $output);
     }
 
     private static function endOfDay(string $date): int

@@ -1,5 +1,10 @@
 # Release Notes for Ledge for Laravel
 
+## 1.1.0 - 2026-11-10
+- The `phpVersion` check now trips when the running branch is close to end of life, whatever its phase: `php_eol_unhealthy_within_days` (default `90`, `LEDGE_PHP_EOL_UNHEALTHY_WITHIN_DAYS`) and `php_eol_degraded_within_days` (default `null`, off, `LEDGE_PHP_EOL_DEGRADED_WITHIN_DAYS`) count days until the branch's security support ends, inclusive. The worse of this and the phase status wins. Adds `daysUntilEol` to the check's meta (`null` for an unknown or end-of-life branch) and both values to `thresholds`; same shape as the Craft plugin's 5.10.0. Set `php_eol_unhealthy_within_days` to `null` to keep the previous behavior
+- The check now catches its own failures and reports `degraded` with "Check unavailable", like the other checks
+- Documented running the acquire job on a dedicated queue listed first on the worker, since Laravel queues have no job priority (the Craft plugin's `acquireJobPriority` counterpart)
+
 ## 1.0.2 - 2026-10-22
 - Fixed: the `environment` check reported every `env('X')` call in `config/` without a default as a missing variable, which on a stock Laravel app flagged dozens of optional services (`AWS_ENDPOINT`, `PUSHER_APP_KEY`, `MEMCACHED_*`, ...) and, once the config was published, the package's own `LEDGE_*` options. `.env.example` is now the only declaration: keys with a value are required and reported under `missing`, blank keys are optional and reported under `optional` without affecting the status, and `LEDGE_*` is never reported. New `source` field (`.env.example` or `null`) says where the expectations came from
 
