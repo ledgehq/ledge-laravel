@@ -12,10 +12,12 @@ use Throwable;
 /**
  * Support phase of the running PHP branch against php.net's release
  * calendar. `active` is healthy, `security` (bug fixes have stopped) reports
- * `php_security_only_status`, `eol` reports `php_eol_status`. Independently
- * of the phase, a branch within `php_eol_degraded_within_days` /
- * `php_eol_unhealthy_within_days` of its end of life trips that tier; the
- * worse of the two wins. Branches the table does not know are reported as
+ * `php_security_only_status` (healthy by default), `eol` reports
+ * `php_eol_status`. Independently of the phase, a branch within
+ * `php_eol_degraded_within_days` / `php_eol_unhealthy_within_days` (180 / 90
+ * by default) of its end of life trips that tier; the worse of the two wins,
+ * so by default the status follows the time left before end of life rather
+ * than the phase. Branches the table does not know are reported as
  * `unknown` and never trip. Mirrors the Craft plugin's `phpVersion` check.
  */
 class PhpVersionCheck implements CheckInterface

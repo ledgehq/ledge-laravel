@@ -53,7 +53,7 @@ Every check echoes the values it used under a `thresholds` key so the Ledge dash
 | `redis` | `PING` on the default Redis connection; only reported when cache, queue, session, or broadcasting use Redis |
 | `horizon` | Horizon master supervisors running / paused, plus supervisors, processes, per-queue wait times, and recently failed jobs; only reported when `laravel/horizon` is installed |
 | `optimized` | Config, route, and event caches; trips only when `APP_ENV=production` |
-| `phpVersion` | Support phase of the running PHP branch (`active`, `security`, `eol`) against php.net's release calendar, and days until its end of life (`unhealthy` within 90 by default) |
+| `phpVersion` | Support phase of the running PHP branch (`active`, `security`, `eol`) against php.net's release calendar, and days until its end of life (by default `degraded` within 180, `unhealthy` within 90; the security-only phase alone is `healthy`) |
 | `packages` | Installed Composer packages with a newer stable release on Packagist, plus `frameworkVersion` for `laravel/framework` |
 
 The `packages` comparison is made by `php artisan ledge:packages:refresh`, scheduled daily by the package (turn that off with `LEDGE_PACKAGES_AUTO_REFRESH=false` and schedule it yourself). The health poll only reads the stored result and never calls Packagist.

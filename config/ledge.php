@@ -149,12 +149,14 @@ return [
     'not_optimized_status' => env('LEDGE_NOT_OPTIMIZED_STATUS', 'degraded'),
 
     // PHP branch in security-fixes-only phase / past end of life.
-    'php_security_only_status' => env('LEDGE_PHP_SECURITY_ONLY_STATUS', 'degraded'),
+    // Security-only is healthy by default: the status follows the days left
+    // before end of life, below.
+    'php_security_only_status' => env('LEDGE_PHP_SECURITY_ONLY_STATUS', 'healthy'),
     'php_eol_status' => env('LEDGE_PHP_EOL_STATUS', 'unhealthy'),
 
     // Days before the branch's end of life that trip each tier, whatever its
     // phase (null = tier disabled). The worse of this and the phase wins.
-    'php_eol_degraded_within_days' => env('LEDGE_PHP_EOL_DEGRADED_WITHIN_DAYS'),
+    'php_eol_degraded_within_days' => env('LEDGE_PHP_EOL_DEGRADED_WITHIN_DAYS', 180),
     'php_eol_unhealthy_within_days' => env('LEDGE_PHP_EOL_UNHEALTHY_WITHIN_DAYS', 90),
 
     // Status when any installed Composer package has a newer stable release.

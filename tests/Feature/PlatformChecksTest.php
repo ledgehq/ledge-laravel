@@ -129,7 +129,10 @@ final class PlatformChecksTest extends TestCase
     {
         $this->health()
             ->assertJsonPath('checks.phpVersion.version', PHP_VERSION)
-            ->assertJsonPath('checks.phpVersion.branch', PHP_MAJOR_VERSION.'.'.PHP_MINOR_VERSION);
+            ->assertJsonPath('checks.phpVersion.branch', PHP_MAJOR_VERSION.'.'.PHP_MINOR_VERSION)
+            ->assertJsonPath('checks.phpVersion.thresholds.securityOnlyStatus', 'healthy')
+            ->assertJsonPath('checks.phpVersion.thresholds.eolDegradedWithinDays', 180)
+            ->assertJsonPath('checks.phpVersion.thresholds.eolUnhealthyWithinDays', 90);
     }
 
     /**
