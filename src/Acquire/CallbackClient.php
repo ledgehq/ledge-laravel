@@ -20,6 +20,8 @@ class CallbackClient
 
     public const EVENT_PROGRESS = 'acquire.progress';
 
+    public const EVENT_UPLOAD_RETRIED = 'acquire.upload_retried';
+
     public const EVENT_COMPLETED = 'acquire.completed';
 
     public const EVENT_FAILED = 'acquire.failed';

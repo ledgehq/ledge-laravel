@@ -85,13 +85,16 @@ final class AcquireEndpointTest extends TestCase
     {
         Queue::fake();
         $this->http->append($this->keysetResponse(), new Response(200));
+        $before = time();
 
         $this->acquire($this->envelope($this->command()))
             ->assertStatus(202)
             ->assertExactJson(['accepted' => true, 'run_id' => 'run-1']);
 
-        Queue::assertPushed(BackupJob::class, function (BackupJob $job): bool {
+        Queue::assertPushed(BackupJob::class, function (BackupJob $job) use ($before): bool {
             return $job->runId === 'run-1'
+                && $job->acceptedAt >= $before
+                && $job->acceptedAt <= time()
                 && $job->uploadUrl === self::UPLOAD_URL
                 && $job->callbackToken === 'callback-token'
                 && $job->profile === 'backup'

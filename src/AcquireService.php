@@ -196,6 +196,7 @@ class AcquireService
             $command->callbackUrl,
             $command->callbackToken,
             $command->profile,
+            time(),
         );
 
         $job->timeout = $this->settings->acquireJobTimeout;

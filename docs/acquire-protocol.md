@@ -81,7 +81,7 @@ Verification, replay guard, host allowlist, encryption, and the signed-upload fl
 
 | Profile | Purpose | Bundle contents | `acquire.completed` detail |
 |---|---|---|---|
-| `backup` | Scheduled backup | `dump.sql` **only** | `{size, sha256, compressed_size, uncompressed_size, dump_duration_ms, table_count}` |
+| `backup` | Scheduled backup | `dump.sql` **only** | `{size, sha256, compressed_size, uncompressed_size, dump_duration_ms, table_count}` + upload telemetry |
 
 The `backup` profile is deliberately **the database and nothing else**: no env manifest, no metadata sidecar. The completed detail is operational telemetry only (sizes, dump duration, table count, sealed sha256), no application data.
 
@@ -107,7 +107,16 @@ Success: `202 {"accepted": true, "run_id": "..."}`. The job is dispatched on the
 
 Job-side failure reasons (reported via callback and the status endpoint): `no_dump_command` (dump binary not resolvable, or the driver is not MySQL/MariaDB/PostgreSQL/SQLite), `tmp_not_writable`, `insufficient_disk` (free < 2× estimated dump size, or the size could not be estimated), `sodium_unavailable`, `dump_failed`, `archive_failed`, `bundle_too_large`, `encrypt_failed`, `upload_failed`, `run_already_finished`, `unexpected_error`. The job runs once (`tries = 1`); Ledge re-issues a fresh `run_id` rather than retrying a run that failed.
 
-**Upload semantics:** the bundle is a single streamed `PUT` to `upload_url`. Any 2xx response is success and the body is ignored. `413` maps to `bundle_too_large`, `409` to `run_already_finished`; both are terminal.
+**Upload semantics:** the bundle is a streamed `PUT` to `upload_url`, retried on transient failures, the same way for every profile (the shared `AbstractAcquireJob` pipeline). Any 2xx response is success and the body is ignored (the Ledge signed route answers `201 {"ok":true,...}`; an S3 pre-signed PUT answers `200` with an empty body). A PUT to the same URL overwrites the same object, so repeating it is safe; every attempt reopens the already-encrypted bundle and sends the whole body with the same `Content-Length` (nothing is re-dumped or re-encrypted).
+
+- **Retried:** transport failures with no response (connect errors, resets, timeouts) and HTTP `408`, `429`, `500`, `502`, `503` and `504`.
+- **Terminal, never retried:** `413` → `bundle_too_large`, `409` (run already finished) → `run_already_finished`, any other status → `upload_failed` (other 4xx such as `403` for an expired or invalid signature, other 5xx such as `501`, and 3xx since redirects are not followed).
+- **Attempts and waits:** up to 5 attempts. The waits before attempts 2-5 are 2s, 6s, 18s and 54s, each multiplied by a random jitter in [0.75, 1.25] so sites backing up in the same minute spread out: about 80s of waiting in all. A `Retry-After` header (delta-seconds or HTTP-date) longer than the computed wait replaces it, capped at 60s.
+- **Deadline:** Ledge's upload URL is valid for 60 minutes from when it sent the command, and Ledge reaps a run still unfinished 60 minutes after it started. The job records when the command was accepted, and no retry starts at or after accepted + 55 minutes; each attempt's timeout is also clipped to `max(30s, min(600s, time left before that deadline))`, so an attempt cannot run on past the window. Jobs queued by 1.2.0 (or built without the trailing `acceptedAt` constructor argument) carry no accepted time and upload without the deadline.
+- **Time budget:** independently, no new attempt starts once the time since the first attempt began would exceed the per-attempt timeout (600s), so a run of slow timeouts cannot use up the job's `$timeout` (3600s).
+- When retries stop, the `detail` string says why, e.g. `upload target responded with HTTP 503 after 5 attempts`, `… (retry time budget of 600s exhausted)` or `… (upload URL deadline reached)`.
+
+Before 1.3.0 this package (like the Craft plugin before 5.14.0 / 4.14.0) made a single attempt and gave up on the first failure.
 
 ## Database dump
 
@@ -164,12 +173,90 @@ Best-effort `POST` to `callback_url` with `Authorization: Bearer <callback_token
 | `acquire.accepted` | command verified + job dispatched | — |
 | `acquire.started` | job picked up by a worker | — |
 | `acquire.progress` | after each step (`preflight`, `dump`, `manifest`, `encrypt`) | — |
-| `acquire.completed` | bundle uploaded | backup telemetry (see Profiles) |
-| `acquire.failed` | any step failed | `{reason, detail}` |
+| `acquire.upload_retried` | an upload attempt failed and will be retried; sent before the wait (step `upload`) | see below |
+| `acquire.completed` | bundle uploaded | the profile's keys (see Profiles) + upload telemetry, see below |
+| `acquire.failed` | any step failed; at the upload step only once retries are exhausted or the status is terminal | see below |
 
 The `manifest` step is kept for parity with the Craft plugin's step list even though the `backup` profile adds nothing in it.
 
 `acquire.accepted` is sent after the job is dispatched. On the `sync` queue driver the whole run therefore happens inside the request and `accepted` arrives after `completed`; Ledge treats late events as already handled. Use a real queue driver for backups. Laravel queues have no job priority, so to keep a backup from waiting behind a backlog, set `acquire_queue` to a dedicated queue and list it first on the worker (`queue:work --queue=ledge,default`) or in Horizon's supervisor `queue`.
+
+How Ledge treats these today: **any event whose name ends in `.failed` is terminal** (the run is marked failed and the customer alerted), so the package sends `acquire.failed` once and never for a retried attempt. Other events are appended to the run's event log. Per event, Ledge keeps:
+
+- `detail.reason`, cut to 255 characters;
+- on `acquire.completed`, the scalar telemetry keys `sha256`, `size`, `compressed_size`, `uncompressed_size`, `dump_duration_ms`, `table_count`, `encrypt_duration_ms`, `upload_duration_ms`, `upload_attempts`, `peak_memory_bytes`;
+- everything else in `detail` as the event's metrics, after bounding: the first 20 keys at each level, strings cut to 255 characters, nulls dropped, at most two levels of nesting below the top. If the JSON of that is over 1500 bytes, the whole of it is replaced by `{"truncated": true}`.
+
+That last limit is why each event carries a single upload attempt rather than the history, and why the package keeps the rest of `detail` under 1400 bytes as Ledge would store it: when a worst-case attempt would not fit, it drops the attempt's `body`, then its `request_ids`, then cuts the attempt's `error` and the top-level `detail` to 120 characters, and as a last resort leaves the attempt object out. `reason`, `reason_code`, `upload_attempts` and the timings are never dropped. A typical S3 `503 SlowDown` attempt fits whole (about 700 bytes stored for `acquire.upload_retried`, 850 for the final `acquire.failed`). The keys below are additive and absent before 1.3.0 of this package (and on Craft plugins before 5.14.0 / 4.14.0).
+
+### Upload retries and diagnostics
+
+**Reason line.** Each failed upload attempt is summarised in one line, which is what Ledge stores:
+
+```
+attempt 2/5: HTTP 503 SlowDown, request-id abc123, 412 ms, sent 0/26214400 bytes, retry-after 1
+attempt 1/5: ConnectException curl 28, 600012 ms, sent 1048576/26214400 bytes
+```
+
+The parts are the attempt number out of the maximum; `HTTP <status>` with the S3 error code when the body has one, and/or the exception type with curl's error number; `request-id`; the attempt's duration; `sent <bytes>/<bundle size> bytes`; and `retry-after`. Parts whose value is unknown are left out. Values taken from the response are reduced to printable ASCII and capped, and the line (with any `<code>: ` prefix) is always under 255 characters.
+
+**`acquire.upload_retried`** (step `upload`):
+
+| Key | Type | |
+|---|---|---|
+| `reason` | string | the reason line of the attempt that just failed |
+| `max_attempts` | int | attempts allowed (5) |
+| `retry_in_ms` | int | wait before the next attempt |
+| `upload_attempts` | int | attempts made so far |
+| `upload_attempt` | object | the attempt that just failed (below) |
+
+A dropped or failing callback for this event neither fails the job nor uses up an attempt.
+
+**`acquire.failed`** from any step:
+
+| Key | Type | |
+|---|---|---|
+| `reason` | string | the bare reason code (`no_dump_command`, `dump_failed`, `bundle_too_large`, `run_already_finished`, ...), exactly as before, except `upload_failed`, which becomes `upload_failed: <reason line of the last attempt>`, e.g. `upload_failed: attempt 5/5: HTTP 503 SlowDown, request-id abc123, 412 ms, sent 0/26214400 bytes` (Ledge matches `upload_failed` by prefix and other codes exactly) |
+| `reason_code` | string | the bare code, on every failed event |
+| `detail` | string\|null | the human-readable detail, as before |
+| `upload_attempts` | int | upload step only: attempts made |
+| `upload_attempt` | object | upload step only: the last attempt (below); absent when none was made |
+| `dump_duration_ms`, `encrypt_duration_ms`, `upload_duration_ms` | int | whichever phases had been measured (for an upload failure, `upload_duration_ms` is the time spent uploading, waits included) |
+| `peak_memory_bytes` | int | `memory_get_peak_usage(true)` |
+
+The status endpoint keeps recording the bare code.
+
+**`acquire.completed`**: the profile's existing keys, unchanged, plus:
+
+| Key | Type | |
+|---|---|---|
+| `encrypt_duration_ms` | int | archive + encryption time |
+| `upload_duration_ms` | int | upload time, waits included |
+| `upload_attempts` | int | attempts made, `1` when the first succeeded |
+| `peak_memory_bytes` | int | `memory_get_peak_usage(true)` |
+
+Earlier failed attempts of a run that then succeeded were reported by their own `acquire.upload_retried` events.
+
+**Attempt object** (`upload_attempt`):
+
+| Key | Type | |
+|---|---|---|
+| `attempt` | int | 1-based |
+| `started_at` | string | UTC, `2026-11-24T03:00:07Z` |
+| `status` | int\|null | `null` when no response arrived. When the transfer broke after the response headers came in, both `status` and `error` are set and the attempt is judged by its status |
+| `error` | string\|null | exception type and message, at most 200 bytes; `null` when a response arrived cleanly |
+| `curl_errno` | int\|null | `28` timeout, `7` couldn't connect, `56` receive failure, ... |
+| `error_code` | string\|null | the S3 `<Code>` from the response body (`SlowDown`, `ServiceUnavailable`, ...), at most 64 characters of `[A-Za-z0-9._-]` |
+| `request_id` | string\|null | `x-amz-request-id` if present, else the first other request-id header |
+| `request_ids` | object\|null | every response header whose name contains `request-id` or `amz-id`, or is `cf-ray`: name → value, at most 5, values at most 128 bytes; `null` if shed to fit the size budget. No other headers are reported |
+| `retry_after` | string\|null | the raw `Retry-After` header, at most 64 bytes |
+| `duration_ms` | int | |
+| `bytes_sent` | int\|null | bytes of the body curl had sent. Guzzle sends `Expect: 100-continue` for bodies over 1 MB, so a store that throttles can answer before any of the body is sent; `0` here shows that. `null` when the HTTP handler gives no stats |
+| `remote_ip` | string\|null | the address curl connected to |
+| `body` | string\|null | the first 300 bytes of a non-2xx response body, valid UTF-8; `null` if shed to fit the size budget |
+| `retry_in_ms` | int\|null | wait before the next attempt; `null` when none followed |
+
+No reason, detail or attempt object ever contains the upload URL's query string, the callback token or the bundle key: the URL is reduced to scheme + host + path, and the query string, its long values, the callback token and the bundle public key are replaced with `[redacted]` wherever a response or exception message echoes them.
 
 ## Status endpoint (pull fallback)
 
