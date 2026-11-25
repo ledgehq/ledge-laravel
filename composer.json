@@ -14,7 +14,7 @@
     "ext-json": "*",
     "ext-sodium": "*",
     "ext-zlib": "*",
-    "guzzlehttp/guzzle": "^7.8",
+    "guzzlehttp/guzzle": "^7.8 || ^8.0",
     "illuminate/bus": "^13.0",
     "illuminate/console": "^13.0",
     "illuminate/contracts": "^13.0",

@@ -4,8 +4,7 @@ declare(strict_types=1);
 
 namespace LedgeHQ\Ledge\Acquire;
 
-use GuzzleHttp\Exception\ConnectException;
-use GuzzleHttp\Exception\RequestException;
+use GuzzleHttp\Exception\GuzzleException;
 use GuzzleHttp\TransferStats;
 use Psr\Http\Message\ResponseInterface;
 use Throwable;
@@ -74,7 +73,7 @@ class UploadAttempt
             $status,
             $error !== null ? self::shortClass($error) : null,
             $error !== null ? $redactor->excerpt(self::shortClass($error).': '.$error->getMessage(), self::MAX_ERROR_BYTES) : null,
-            $error !== null ? self::curlErrno($error) : null,
+            $error !== null ? self::curlErrno($error, $stats) : null,
             self::errorCode($scan),
             $requestIds['x-amz-request-id'] ?? ($requestIds === [] ? null : reset($requestIds)),
             $requestIds === [] ? null : $requestIds,
@@ -150,13 +149,24 @@ class UploadAttempt
         return $slash === false ? $class : substr($class, $slash + 1);
     }
 
-    private static function curlErrno(Throwable $error): ?int
+    /**
+     * Guzzle 7 carries curl's errno in the exception's handler context.
+     * Guzzle 8 removed that; its curl handler reports the errno as the
+     * transfer stats' handler error data instead (any other handler puts an
+     * exception there, which gives no errno).
+     */
+    private static function curlErrno(Throwable $error, ?TransferStats $stats): ?int
     {
-        if (! $error instanceof ConnectException && ! $error instanceof RequestException) {
+        if (! $error instanceof GuzzleException) {
             return null;
         }
 
-        $errno = $error->getHandlerContext()['errno'] ?? null;
+        if (method_exists($error, 'getHandlerContext')) {
+            $context = $error->getHandlerContext();
+            $errno = is_array($context) ? ($context['errno'] ?? null) : null;
+        } else {
+            $errno = $stats?->getHandlerErrorData();
+        }
 
         return is_int($errno) && $errno > 0 ? $errno : null;
     }

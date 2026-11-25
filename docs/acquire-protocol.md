@@ -244,8 +244,8 @@ Earlier failed attempts of a run that then succeeded were reported by their own 
 | `attempt` | int | 1-based |
 | `started_at` | string | UTC, `2026-11-24T03:00:07Z` |
 | `status` | int\|null | `null` when no response arrived. When the transfer broke after the response headers came in, both `status` and `error` are set and the attempt is judged by its status |
-| `error` | string\|null | exception type and message, at most 200 bytes; `null` when a response arrived cleanly |
-| `curl_errno` | int\|null | `28` timeout, `7` couldn't connect, `56` receive failure, ... |
+| `error` | string\|null | exception type and message, at most 200 bytes; `null` when a response arrived cleanly. The type is Guzzle's short class name, which depends on the installed Guzzle major: a timeout is `ConnectException` on Guzzle 7 and `ConnectTimeoutException`, `NetworkTimeoutException` or (after the response headers) `ResponseTimeoutException` on Guzzle 8; a failure after the headers is `RequestException` on 7 and `ResponseTransferException` on 8. The reason line uses the same name |
+| `curl_errno` | int\|null | `28` timeout, `7` couldn't connect, `56` receive failure, ... Read from the exception's handler context on Guzzle 7 and from the transfer stats on Guzzle 8, so the value is the same with the curl handler; `null` with any other handler, on both |
 | `error_code` | string\|null | the S3 `<Code>` from the response body (`SlowDown`, `ServiceUnavailable`, ...), at most 64 characters of `[A-Za-z0-9._-]` |
 | `request_id` | string\|null | `x-amz-request-id` if present, else the first other request-id header |
 | `request_ids` | object\|null | every response header whose name contains `request-id` or `amz-id`, or is `cf-ray`: name → value, at most 5, values at most 128 bytes; `null` if shed to fit the size budget. No other headers are reported |

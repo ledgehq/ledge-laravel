@@ -7,7 +7,6 @@ namespace LedgeHQ\Ledge\Acquire;
 use Closure;
 use GuzzleHttp\ClientInterface;
 use GuzzleHttp\Exception\GuzzleException;
-use GuzzleHttp\Exception\RequestException;
 use GuzzleHttp\Psr7\Stream;
 use GuzzleHttp\Psr7\Utils;
 use GuzzleHttp\TransferStats;
@@ -192,11 +191,14 @@ class BundleUploader
             ]);
         } catch (Throwable $e) {
             $error = $e;
-            $response = $e instanceof RequestException ? $e->getResponse() : null;
+            // Guzzle 7 has getResponse() on RequestException, Guzzle 8 only
+            // on ResponseException and its subclasses.
+            $response = $e instanceof GuzzleException && method_exists($e, 'getResponse') ? $e->getResponse() : null;
+            $response = $response instanceof ResponseInterface ? $response : null;
 
-            // curl's "connection" errnos (28 timeout among them) become a
-            // ConnectException without the response even when its headers
-            // had arrived; the transfer stats still carry it.
+            // On Guzzle 7, curl's "connection" errnos (28 timeout among them)
+            // become a ConnectException without the response even when its
+            // headers had arrived; the transfer stats still carry it.
             if ($response === null && $this->stats !== null) {
                 $response = $this->stats->getResponse();
             }

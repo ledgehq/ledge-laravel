@@ -7,7 +7,6 @@ namespace LedgeHQ\Ledge\Tests\Unit\Acquire;
 use Closure;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\ConnectException;
-use GuzzleHttp\Exception\RequestException;
 use GuzzleHttp\Handler\MockHandler;
 use GuzzleHttp\HandlerStack;
 use GuzzleHttp\Middleware;
@@ -21,6 +20,7 @@ use LedgeHQ\Ledge\Acquire\CallbackPayloads;
 use LedgeHQ\Ledge\Acquire\UploadAttempt;
 use LedgeHQ\Ledge\Acquire\UploadDiagnostics;
 use LedgeHQ\Ledge\Acquire\UploadSummary;
+use LedgeHQ\Ledge\Tests\Support\BuildsGuzzleFailures;
 use PHPUnit\Framework\TestCase;
 use Psr\Http\Message\RequestInterface;
 use RuntimeException;
@@ -28,6 +28,8 @@ use Throwable;
 
 final class BundleUploaderTest extends TestCase
 {
+    use BuildsGuzzleFailures;
+
     private const SIGNATURE = '9f3c2b7a1d4e8f60a5b3c9d2e7f1a4b8c6d0e3f5a7b9c1d2e4f6a8b0c2d4e6f8';
 
     private const URL = 'https://storage.ledgehq.app/api/bundles/run-123?expires=1795000000&signature='.self::SIGNATURE;
@@ -209,20 +211,23 @@ final class BundleUploaderTest extends TestCase
 
     public function test_transport_failure_is_retried(): void
     {
-        $diagnostics = $this->uploader([
-            new ConnectException('cURL error 28: Operation timed out', new Request('PUT', self::URL), null, ['errno' => 28]),
-            new Response(200),
-        ])->upload($this->bundlePath, self::URL);
+        $requests = 0;
+        $diagnostics = $this->statsUploader([
+            [null, self::curlFailure(28, 'cURL error 28: Operation timed out', new Request('PUT', self::URL))],
+            [null, new Response(200)],
+        ], $requests)->upload($this->bundlePath, self::URL);
 
-        $this->assertCount(2, $this->history);
-        $this->assertSame([self::CONTENT, self::CONTENT], $this->bodies);
+        $this->assertSame(2, $requests);
 
+        // Guzzle 8 names a timeout before any response NetworkTimeoutException.
+        $type = self::isGuzzle8() ? 'NetworkTimeoutException' : 'ConnectException';
         $first = $this->failedLog($diagnostics)[0];
         $this->assertNull($first['status']);
-        $this->assertSame('ConnectException: cURL error 28: Operation timed out', $first['error']);
+        $this->assertSame("{$type}: cURL error 28: Operation timed out", $first['error']);
         $this->assertSame(28, $first['curl_errno']);
         $this->assertNull($first['request_ids']);
         $this->assertNull($first['body']);
+        $this->assertSame("attempt 1/5: {$type} curl 28, 0 ms", UploadSummary::line($diagnostics->attempts[0], 5, 22));
     }
 
     public function test_transport_failure_exhaustion_keeps_the_message(): void
@@ -231,26 +236,38 @@ final class BundleUploaderTest extends TestCase
 
         $this->assertSame('ConnectException: refused after 5 attempts', $e->detail);
         $this->assertCount(5, $this->history);
+        $this->assertNull($this->failedLog($this->diagnostics($e))[4]['curl_errno']);
     }
 
     public function test_error_response_carried_by_an_exception_is_judged_by_its_status(): void
     {
-        $request = new Request('PUT', self::URL);
-        $e = $this->assertFailsWith('bundle_too_large', [
-            new RequestException('send failure', $request, new Response(413), null, ['errno' => 55]),
-        ]);
+        $requests = 0;
+        $tooLarge = new Response(413);
+        $uploader = $this->statsUploader([
+            [$tooLarge, self::curlFailure(55, 'send failure', new Request('PUT', self::URL), $tooLarge), 55],
+            [null, new Response(201)],
+        ], $requests);
 
-        $this->assertCount(1, $this->history);
-        $attempt = $this->failedLog($this->diagnostics($e))[0];
-        $this->assertSame(413, $attempt['status']);
-        $this->assertSame('RequestException: send failure', $attempt['error']);
-        $this->assertSame(55, $attempt['curl_errno']);
+        try {
+            $uploader->upload($this->bundlePath, self::URL);
+            $this->fail('Expected AcquireException');
+        } catch (AcquireException $e) {
+            $this->assertSame('bundle_too_large', $e->reason);
+            $this->assertSame(1, $requests);
+
+            $attempt = $this->failedLog($this->diagnostics($e))[0];
+            $this->assertSame(413, $attempt['status']);
+            $type = self::isGuzzle8() ? 'ResponseTransferException' : 'RequestException';
+            $this->assertSame("{$type}: send failure", $attempt['error']);
+            $this->assertSame(55, $attempt['curl_errno']);
+        }
     }
 
     public function test_timeout_after_terminal_headers_is_judged_by_the_stats_response(): void
     {
         $requests = 0;
-        $uploader = $this->statsUploader([[new Response(409), $this->timeout()], [null, new Response(201)]], $requests);
+        $conflict = new Response(409);
+        $uploader = $this->statsUploader([[$conflict, $this->timeout($conflict)], [null, new Response(201)]], $requests);
 
         try {
             $uploader->upload($this->bundlePath, self::URL);
@@ -261,7 +278,7 @@ final class BundleUploaderTest extends TestCase
 
             $attempt = $this->failedLog($this->diagnostics($e))[0];
             $this->assertSame(409, $attempt['status']);
-            $this->assertStringStartsWith('ConnectException: ', $attempt['error']);
+            $this->assertStringStartsWith(self::isGuzzle8() ? 'ResponseTimeoutException: ' : 'ConnectException: ', $attempt['error']);
             $this->assertSame(28, $attempt['curl_errno']);
         }
     }
@@ -269,8 +286,9 @@ final class BundleUploaderTest extends TestCase
     public function test_timeout_after_retryable_headers_keeps_the_stats_response(): void
     {
         $requests = 0;
+        $slowDown = new Response(503, ['X-Amz-Request-Id' => 'TX503'], self::SLOW_DOWN);
         $diagnostics = $this->statsUploader([
-            [new Response(503, ['X-Amz-Request-Id' => 'TX503'], self::SLOW_DOWN), $this->timeout()],
+            [$slowDown, $this->timeout($slowDown)],
             [null, new Response(201)],
         ], $requests)->upload($this->bundlePath, self::URL);
 
@@ -712,10 +730,11 @@ final class BundleUploaderTest extends TestCase
     }
 
     /**
-     * Mimics curl's handler: on_stats sees the response whose headers arrived,
-     * then the request may still fail without it.
+     * Mimics curl's handler: on_stats sees the response whose headers arrived
+     * and curl's errno (28 for a failure unless given), then the request may
+     * still fail without the response.
      *
-     * @param  array<array{0: Response|null, 1: Response|Throwable}>  $outcomes
+     * @param  array<array{0: Response|null, 1: Response|Throwable, 2?: int}>  $outcomes
      */
     private function statsUploader(array $outcomes, int &$requests): BundleUploader
     {
@@ -723,9 +742,11 @@ final class BundleUploaderTest extends TestCase
 
         $handler = function (RequestInterface $request, array $options) use (&$outcomes, &$requests) {
             $requests++;
-            [$statsResponse, $result] = array_shift($outcomes);
+            $outcome = array_shift($outcomes);
+            [$statsResponse, $result] = $outcome;
             $statsResponse ??= $result instanceof Response ? $result : null;
-            ($options['on_stats'])(new TransferStats($request, $statsResponse, 0.1, $result instanceof Throwable ? 28 : null, []));
+            $errno = $result instanceof Throwable ? ($outcome[2] ?? 28) : 0;
+            ($options['on_stats'])(new TransferStats($request, $statsResponse, 0.1, $errno, []));
 
             return $result instanceof Throwable ? Create::rejectionFor($result) : Create::promiseFor($result);
         };
@@ -733,13 +754,13 @@ final class BundleUploaderTest extends TestCase
         return new BundleUploader(new Client(['handler' => HandlerStack::create($handler)]), 600, 5, ...$this->fakes());
     }
 
-    private function timeout(): ConnectException
+    private function timeout(?Response $headersArrived = null): Throwable
     {
-        return new ConnectException(
+        return self::curlFailure(
+            28,
             'cURL error 28: Operation timed out after 600000 milliseconds for '.self::URL,
             new Request('PUT', self::URL),
-            null,
-            ['errno' => 28],
+            $headersArrived,
         );
     }
 

@@ -6,7 +6,7 @@ Health, uptime, and compliance monitoring package for Laravel 13+ applications. 
 
 - PHP 8.3+, Laravel 13+ only. Namespace `LedgeHQ\Ledge`, config key `ledge`.
 - Composer is not on the host PATH. Download `composer.phar` (`curl -sS https://getcomposer.org/installer | php`) into a scratch directory and run it with `php`.
-- `composer test` (PHPUnit 12 + Testbench 11), `composer check-cs` / `fix-cs` (Pint, laravel preset, `declare(strict_types=1)` enforced), `composer phpstan` (Larastan level 6, `src/` only). All three must pass before a commit; CI runs them on PHP 8.3 and 8.4.
+- `composer test` (PHPUnit 12 + Testbench 11), `composer check-cs` / `fix-cs` (Pint, laravel preset, `declare(strict_types=1)` enforced), `composer phpstan` (Larastan level 6, `src/` only). All three must pass before a commit; CI runs them on PHP 8.3 and 8.4, each against Guzzle 7 and 8.
 - The test suite needs the `sqlite3` binary for the real-dump test; it is present on macOS and the CI runners.
 
 ## Layout
@@ -39,4 +39,5 @@ tests/Support               Signing and bundle-decrypt helpers
 - `ledge_base_url` is a trust anchor: file-config only, never `env()`, never derived from a request.
 - Acquire profiles are a registry so the Craft 6 layer can add `full`. Keep `AbstractAcquireJob` free of profile-specific logic.
 - Testbench `DefineEnvironment` attribute methods run before the class-level `defineEnvironment()`; if a test needs the opposite of the class default, give it its own test class.
+- Guzzle is `^7.8 || ^8.0`. Code that touches Guzzle's exception or handler API feature-detects (`method_exists`) rather than checking the version, and tests build curl-style failures with `tests/Support/BuildsGuzzleFailures`. To run the suite on the other major, copy the repo without `vendor` and `composer update guzzlehttp/guzzle guzzlehttp/psr7 guzzlehttp/promises -W --with guzzlehttp/guzzle:^8.0` there; the committed lock stays on Guzzle 7.
 - Commit messages: a short imperative subject, a body that says why, and the attribution trailer the session provides.
